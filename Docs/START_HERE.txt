@@ -1,0 +1,14 @@
+HOLDOVER — Unreal Engine 5.8 + MCP (No AngelScript)
+
+Files:
+- HOLDOVER_UE5.8_MCP_BUILD_PLAN.md: staged production plan, architecture, setup, prompts, schedule and test checklist.
+- HOLDOVER_MASTER_AGENT_PROMPT.md: paste this into OpenCode or Claude Code after opening the project and connecting MCP.
+
+Quick start:
+1. Install Unreal Engine 5.8 and Visual Studio 2022 with Game development with C++.
+2. Create a C++ First Person project named Holdover.
+3. Enable Unreal MCP and All Toolsets; restart.
+4. Enable Model Context Protocol Auto Start in Editor Preferences; keep endpoint local at http://127.0.0.1:8000/mcp.
+5. For OpenCode, from the project root run: opencode mcp add unreal --url http://127.0.0.1:8000/mcp
+6. Run the MCP smoke test in the plan before building gameplay.
+7. Do not use AngelScript or transfer the previous .as kit into the new project.
