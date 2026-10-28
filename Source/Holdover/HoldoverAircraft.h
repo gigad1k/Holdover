@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "HoldoverInteractableInterface.h"
 #include "HoldoverAircraft.generated.h"
 
 class AHoldoverSurfaceSection;
@@ -13,7 +14,8 @@ enum class EHoldoverState : uint8
 {
 	Incomplete		UMETA(DisplayName = "Incomplete"),
 	HoldoverActive	UMETA(DisplayName = "Holdover Active"),
-	HoldoverExpired	UMETA(DisplayName = "Holdover Expired")
+	HoldoverExpired	UMETA(DisplayName = "Holdover Expired"),
+	Departed		UMETA(DisplayName = "Departed")
 };
 
 /**
@@ -22,12 +24,16 @@ enum class EHoldoverState : uint8
  * SimulateTreatment(dt, weather) is the single update path (also used by tests).
  */
 UCLASS()
-class HOLDOVER_API AHoldoverAircraft : public AActor
+class HOLDOVER_API AHoldoverAircraft : public AActor, public IHoldoverInteractableInterface
 {
 	GENERATED_BODY()
 
 public:
 	AHoldoverAircraft();
+
+	// --- interaction (departure request) ---
+	virtual FText GetInteractionPrompt_Implementation() const override;
+	virtual void Interact_Implementation(AActor* Interactor) override;
 
 	// --- tuning (editable defaults; data-asset-ise later) ---
 	UPROPERTY(EditAnywhere, Category = "Holdover")
@@ -72,6 +78,18 @@ public:
 	bool IsClearedForTakeoff() const { return HoldoverState == EHoldoverState::HoldoverActive && HoldoverRemaining > 0.f; }
 
 	/**
+	 * Attempts departure. Succeeds only with a running holdover, and only once
+	 * per shift (a plane must never be rewarded twice).
+	 */
+	bool TryDepart();
+
+	/** Resets treatment state and position for a new shift (server). */
+	void ResetForNewShift();
+
+	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Holdover")
+	bool bDeparted = false;
+
+	/**
 	 * Deterministic treatment update: degrades protection with weather, manages
 	 * holdover start/burn/expiry. Called by the server tick; tests call directly.
 	 */
@@ -90,4 +108,10 @@ protected:
 
 	UPROPERTY(Transient)
 	TArray<AHoldoverSurfaceSection*> Sections;
+
+	UPROPERTY(Transient)
+	FVector SpawnLocation;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Departure")
+	float DepartSpeed = 400.f;
 };

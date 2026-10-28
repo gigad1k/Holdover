@@ -1,5 +1,18 @@
 # CHANGELOG
 
+## 2026-10-28 — Phase 5: hazards, scoring, shift loop
+- `AHoldoverGameState`: shift lifecycle (start/tick/end/restart), quota, on-time vs late
+  departures, pay/deductions, pass/fail evaluation, replicated dispatcher feed (8 lines).
+- `AHoldoverAircraft`: departure via the interact pattern ("Press E - Request Clearance") —
+  `TryDepart` requires a running holdover and succeeds **exactly once** (`bDeparted`);
+  departed aircraft climbs away; `ResetForNewShift` makes the loop repeatable.
+- `AHoldoverHazardVolume`: ice (traction halved while overlapped, fair recovery) and jet blast
+  (launches the player + penalty + dispatch line). Spawned on the ramp's marked locations.
+- HUD: shift clock/quota/pay/deductions, pass/fail banner, dispatcher feed.
+- Shift restart without app restart: E on the test cube after shift end resets aircraft + counters.
+- Tests: `Holdover.Shift.DepartureOnlyOnceAndValid` + `Holdover.Shift.ScoringAndRestart` —
+  **all 5 Holdover tests PASS** via MCP. PIE: shift starts, dispatch feed live.
+
 ## 2026-10-28 — Phase 4: Type IV, tanks, weather, holdover
 - `UHoldoverSprayComponent`: two tanks (Type I / Type IV) with separate rates/capacities, **Q** to
   toggle active fluid; `ApplySpray` core rules — Type I cleans, Type IV protects **clean sections

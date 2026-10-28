@@ -2,8 +2,11 @@
 
 #include "HoldoverTestInteractable.h"
 #include "Components/StaticMeshComponent.h"
+#include "EngineUtils.h"
 #include "Holdover.h"
+#include "HoldoverAircraft.h"
 #include "HoldoverCharacter.h"
+#include "HoldoverGameState.h"
 #include "HoldoverSprayComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
@@ -38,6 +41,18 @@ void AHoldoverTestInteractable::Interact_Implementation(AActor* Interactor)
 		{
 			Spray->RefillTanks();
 		}
+	}
+
+	// Greybox behaviour: restarting the shift without restarting the game.
+	AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
+	if (GS && GS->ShiftState == EShiftState::ShiftEnded)
+	{
+		for (TActorIterator<AHoldoverAircraft> It(GetWorld()); It; ++It)
+		{
+			It->ResetForNewShift();
+		}
+		GS->RestartShift();
+		UE_LOG(LogHoldover, Display, TEXT("Shift restarted via test interactable"));
 	}
 
 	if (!DynamicMaterial)

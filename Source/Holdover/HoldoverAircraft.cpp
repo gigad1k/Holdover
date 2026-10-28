@@ -18,9 +18,75 @@ AHoldoverAircraft::AHoldoverAircraft()
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 }
 
+FText AHoldoverAircraft::GetInteractionPrompt_Implementation() const
+{
+	if (bDeparted)
+	{
+		return FText::FromString(TEXT("Departed"));
+	}
+	switch (HoldoverState)
+	{
+	case EHoldoverState::HoldoverActive:
+		return FText::FromString(TEXT("Press E - Request Clearance"));
+	case EHoldoverState::HoldoverExpired:
+		return FText::FromString(TEXT("Holdover expired - retreat before departure"));
+	default:
+		return FText::FromString(TEXT("Treatment incomplete"));
+	}
+}
+
+void AHoldoverAircraft::Interact_Implementation(AActor* Interactor)
+{
+	if (!HasAuthority())
+	{
+		return;
+	}
+
+	AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
+	const bool bOnTime = GS && GS->ShiftState == EShiftState::InProgress && GS->ShiftTimeRemaining > 0.f;
+
+	if (TryDepart())
+	{
+		if (GS)
+		{
+			GS->RegisterDeparture(bOnTime);
+		}
+		UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' departed (%s)"), *GetName(), bOnTime ? TEXT("on-time") : TEXT("late"));
+	}
+}
+
+bool AHoldoverAircraft::TryDepart()
+{
+	if (bDeparted || !IsClearedForTakeoff())
+	{
+		return false;
+	}
+	bDeparted = true;
+	HoldoverState = EHoldoverState::Departed;
+	return true;
+}
+
+void AHoldoverAircraft::ResetForNewShift()
+{
+	bDeparted = false;
+	HoldoverState = EHoldoverState::Incomplete;
+	HoldoverRemaining = 0.f;
+	SetActorLocation(SpawnLocation);
+	for (AHoldoverSurfaceSection* Section : Sections)
+	{
+		if (Section)
+		{
+			Section->CleanlinessPercent = 0.f;
+			Section->ProtectionPercent = 0.f;
+		}
+	}
+}
+
 void AHoldoverAircraft::BeginPlay()
 {
 	Super::BeginPlay();
+
+	SpawnLocation = GetActorLocation();
 
 	// Gather sections that were not registered explicitly (greybox test setups).
 	for (TActorIterator<AHoldoverSurfaceSection> It(GetWorld()); It; ++It)
@@ -38,6 +104,13 @@ void AHoldoverAircraft::BeginPlay()
 void AHoldoverAircraft::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	if (HasAuthority() && bDeparted)
+	{
+		// Greybox departure cue: the aircraft climbs away.
+		AddActorWorldOffset(FVector(0.f, 0.f, DepartSpeed * DeltaSeconds));
+		return;
+	}
 
 	if (!HasAuthority())
 	{
@@ -152,6 +225,10 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 		HoldoverRemaining = HoldoverDuration;
 		bJustStarted = true;
 		UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover started (%.0fs)"), *GetName(), HoldoverRemaining);
+		if (AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr)
+		{
+			GS->AddDispatch(TEXT("Aircraft treated. Holdover running - clear it for departure!"));
+		}
 	}
 
 	// 3. Holdover burn / invalidation (not on the starting tick).
@@ -180,6 +257,10 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 					}
 				}
 				UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover EXPIRED — retreatment required"), *GetName());
+				if (AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr)
+				{
+					GS->AddDispatch(TEXT("HOLDOVER EXPIRED! Protection is gone - retreat the aircraft."));
+				}
 			}
 		}
 	}
@@ -197,6 +278,7 @@ void AHoldoverAircraft::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AHoldoverAircraft, HoldoverState);
 	DOREPLIFETIME(AHoldoverAircraft, HoldoverRemaining);
+	DOREPLIFETIME(AHoldoverAircraft, bDeparted);
 }
 
 void AHoldoverAircraft::OnRep_Holdover()

@@ -97,6 +97,29 @@ void AHoldoverHUD::DrawHUD()
 			break;
 		}
 
+		// Shift status + dispatcher feed
+		if (const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>())
+		{
+			FString ShiftLine = FString::Printf(TEXT("SHIFT %d/%d   time %.0fs   pay $%d   deductions $%d"),
+				GS->OnTimeDepartures, GS->Quota, GS->ShiftTimeRemaining, GS->Money, GS->Deductions);
+			DrawText(ShiftLine, FLinearColor::White, 24.f, 24.f, UEngine::GetMediumFont(), 1.f);
+
+			if (GS->ShiftState == EShiftState::ShiftEnded)
+			{
+				const FString Banner = GS->bShiftPassed ? TEXT("SHIFT PASSED!") : TEXT("RESTRUCTURED - press E on the cube for a new shift");
+				DrawText(Banner, GS->bShiftPassed ? FLinearColor::Green : FLinearColor::Red,
+					24.f, 52.f, UEngine::GetLargeFont(), 1.2f);
+			}
+
+			// Last dispatch lines
+			float Y = 84.f;
+			for (int32 i = FMath::Max(0, GS->DispatchFeed.Num() - 3); i < GS->DispatchFeed.Num(); ++i)
+			{
+				DrawText(GS->DispatchFeed[i].ToString(), FLinearColor(0.7f, 0.9f, 1.f), 24.f, Y, UEngine::GetSmallFont(), 1.f);
+				Y += 18.f;
+			}
+		}
+
 		// Fluid-rule hint near the reticle
 		if (!Spray->TargetHint.IsEmpty())
 		{

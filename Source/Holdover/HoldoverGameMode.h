@@ -16,6 +16,15 @@ class AHoldoverGameMode : public AGameModeBase
 
 public:
 	AHoldoverGameMode();
+
+protected:
+	virtual void BeginPlay() override;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shift")
+	float ShiftDuration = 120.f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Shift")
+	int32 ShiftQuota = 1;
 };
 
 

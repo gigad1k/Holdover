@@ -18,13 +18,17 @@ _(Source: build plan §8. Re-run after significant changes. Mark results with da
 - [ ] A hit on scenery does not change aircraft values. _(trace only hits `AHoldoverSurfaceSection`;
       verify manually)_
 
-## Shift and hazards — _not yet implemented (Phase 5)_
-- [ ] On-time departure rewards match the configured values.
-- [ ] Late/invalid departure does not award on-time credit.
-- [ ] Penalties are applied once and shown in the results panel.
-- [ ] Ice and jet blast are obvious, fair and recoverable.
-- [ ] Shift pass and fail paths both work.
-- [ ] Restarting a shift resets the right values and does not retain old timers or rewards.
+## Shift and hazards — implemented (Phase 5)
+- [x] On-time departure rewards match configured values — test PASS (2026-10-28).
+- [x] Late/invalid departure does not award on-time credit — test PASS (late = deduction).
+- [x] The same plane cannot depart twice or pay twice — test PASS (`bDeparted` gate).
+- [x] Penalties applied once and shown in results (jet blast penalty + late deduction) — test PASS.
+- [x] Shift pass and fail paths both work — test PASS (quota met vs missed).
+- [x] Restarting a shift resets the right values — test PASS + runtime (E on cube after end).
+- [ ] **Manual**: full loop in PIE — treat the aircraft, depart with E, then let the shift timer
+      expire; confirm RESTRUCTURED banner; press E on the cube; confirm counters reset.
+- [ ] Ice and jet blast are obvious, fair and recoverable — **manual**: walk over the ice disc
+      (slower movement, recovers on exit); enter the jet blast zone (pushed away + -$25).
 
 ## Multiplayer
 - [x] Two instances connect via listen server (2026-10-28, `af02efe`+): PIE 2-player shows
@@ -32,11 +36,13 @@ _(Source: build plan §8. Re-run after significant changes. Mark results with da
 - [x] Owner-only input and camera — manual: each PIE window controls only its own character (2026-10-28).
 - [x] Replicated character movement — **manual test required**: move one player, confirm the other
       window shows the movement. (Automation cannot inject input yet; see KNOWN_ISSUES.)
-- [ ] Server rejects out-of-range/invalid spray requests. _(Phase 3)_
-- [ ] All clients see the same surface values and aircraft state. _(Phase 3–4)_
-- [ ] The same plane cannot depart twice or pay twice. _(Phase 5)_
-- [ ] Weather and holdover are not independently advanced by every client. _(Phase 4)_
-- [ ] Host and client agree on final score and result. _(Phase 5)_
+- [ ] Server rejects out-of-range/invalid spray requests. _(range check in `ServerSpray` since
+      Phase 3; manual fuzz pending)_
+- [ ] All clients see the same surface values and aircraft state. _(replicated since Phase 3/4;
+      manual 2p check pending)_
+- [x] The same plane cannot depart twice or pay twice. _(Phase 5, test PASS)_
+- [x] Weather and holdover are not independently advanced by every client. _(server-only ticks)_
+- [ ] Host and client agree on final score and result. _(Phase 5; manual 2p check pending)_
 
 ## Packaged build — _not yet packaged (Phase 10)_
 - [ ] Launches outside Unreal Editor.

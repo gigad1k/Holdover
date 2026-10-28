@@ -88,6 +88,17 @@ spawn_mesh("DeicingPad", CUBE, (0, 1500, 1), scale=(12, 16, 0.05))
 spawn_mesh("MARKER_IcePatch", CYL, (-1800, 800, 5), scale=(3, 3, 0.05))
 spawn_mesh("MARKER_JetBlastVolume", CUBE, (0, 4200, 300), scale=(10, 4, 3))
 
+# --- hazard volumes on the marked locations ---
+ice = spawn_actor(unreal.HoldoverHazardVolume, (-1800, 800, 0), (0, 0, 0))
+ice.set_actor_label("Hazard_IcePatch")
+ice.set_editor_property("hazard_type", unreal.HoldoverHazardType.ICE)
+ice.set_actor_scale3d(unreal.Vector(2, 2, 1))
+
+blast = spawn_actor(unreal.HoldoverHazardVolume, (0, 4200, 0), (0, 0, 0))
+blast.set_actor_label("Hazard_JetBlast")
+blast.set_editor_property("hazard_type", unreal.HoldoverHazardType.JET_BLAST)
+blast.set_actor_scale3d(unreal.Vector(5, 3, 2))
+
 # --- test aircraft: one AHoldoverAircraft + four labelled surface sections ---
 spawn_class("TestAircraft", unreal.HoldoverAircraft, (0, 2600, 0))
 
