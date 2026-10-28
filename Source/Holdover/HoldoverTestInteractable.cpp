@@ -3,6 +3,8 @@
 #include "HoldoverTestInteractable.h"
 #include "Components/StaticMeshComponent.h"
 #include "Holdover.h"
+#include "HoldoverCharacter.h"
+#include "HoldoverSprayComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -28,6 +30,15 @@ void AHoldoverTestInteractable::Interact_Implementation(AActor* Interactor)
 {
 	UE_LOG(LogHoldover, Display, TEXT("TestInteractable '%s' interacted by '%s'"), *GetName(),
 		Interactor ? *Interactor->GetName() : TEXT("null"));
+
+	// Greybox behaviour: refills the interactor's Type I tank (Phase 4 turns this into a real refill station).
+	if (AHoldoverCharacter* Character = Cast<AHoldoverCharacter>(Interactor))
+	{
+		if (UHoldoverSprayComponent* Spray = Character->GetSprayComponent())
+		{
+			Spray->RefillTypeI();
+		}
+	}
 
 	if (!DynamicMaterial)
 	{

@@ -11,6 +11,7 @@ class UInputComponent;
 class USkeletalMeshComponent;
 class UCameraComponent;
 class UInputAction;
+class UHoldoverSprayComponent;
 struct FInputActionValue;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
@@ -30,6 +31,10 @@ class AHoldoverCharacter : public ACharacter
 	/** First person camera */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FirstPersonCameraComponent;
+
+	/** Server-validated spray (Type I / Type IV treatment) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components", meta = (AllowPrivateAccess = "true"))
+	UHoldoverSprayComponent* SprayComponent;
 
 protected:
 
@@ -90,7 +95,11 @@ protected:
 	/** Interact (bound to E via transient action): trace from camera and call the target's interact */
 	void InteractPressed(const FInputActionValue& Value);
 
-	/** UE 5.8 removed BindKey: sprint/interact use runtime-created actions + mapping context. */
+	/** Spray (bound to Left Mouse via transient action) */
+	void SprayStarted(const FInputActionValue& Value);
+	void SprayStopped(const FInputActionValue& Value);
+
+	/** UE 5.8 removed BindKey: sprint/interact/spray use runtime-created actions + mapping context. */
 	void EnsureExtraInputBindings(UInputComponent* InputComponent);
 
 	UPROPERTY(Transient)
@@ -98,6 +107,9 @@ protected:
 
 	UPROPERTY(Transient)
 	UInputAction* InteractAction;
+
+	UPROPERTY(Transient)
+	UInputAction* SprayAction;
 
 	UPROPERTY(Transient)
 	class UInputMappingContext* HoldoverExtraContext;
@@ -123,6 +135,9 @@ public:
 
 	/** Returns first person camera component **/
 	UCameraComponent* GetFirstPersonCameraComponent() const { return FirstPersonCameraComponent; }
+
+	/** Returns the spray component **/
+	UHoldoverSprayComponent* GetSprayComponent() const { return SprayComponent; }
 
 };
 

@@ -15,6 +15,7 @@
 #include "Holdover.h"
 #include "HoldoverHUD.h"
 #include "HoldoverInteractableInterface.h"
+#include "HoldoverSprayComponent.h"
 
 AHoldoverCharacter::AHoldoverCharacter()
 {
@@ -38,6 +39,9 @@ AHoldoverCharacter::AHoldoverCharacter()
 	FirstPersonCameraComponent->bEnableFirstPersonScale = true;
 	FirstPersonCameraComponent->FirstPersonFieldOfView = 70.0f;
 	FirstPersonCameraComponent->FirstPersonScale = 0.6f;
+
+	// Spray / treatment component (server-validated)
+	SprayComponent = CreateDefaultSubobject<UHoldoverSprayComponent>(TEXT("Spray Component"));
 
 	// configure the character comps
 	GetMesh()->SetOwnerNoSee(true);
@@ -138,9 +142,11 @@ void AHoldoverCharacter::EnsureExtraInputBindings(UInputComponent* InInputCompon
 	{
 		SprintAction = NewObject<UInputAction>(this, TEXT("IA_Sprint_Transient"));
 		InteractAction = NewObject<UInputAction>(this, TEXT("IA_Interact_Transient"));
+		SprayAction = NewObject<UInputAction>(this, TEXT("IA_Spray_Transient"));
 		HoldoverExtraContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Holdover_Transient"));
 		HoldoverExtraContext->MapKey(SprintAction, EKeys::LeftShift);
 		HoldoverExtraContext->MapKey(InteractAction, EKeys::E);
+		HoldoverExtraContext->MapKey(SprayAction, EKeys::LeftMouseButton);
 
 		if (const APlayerController* PC = Cast<APlayerController>(GetController()))
 		{
@@ -159,6 +165,24 @@ void AHoldoverCharacter::EnsureExtraInputBindings(UInputComponent* InInputCompon
 		EIC->BindAction(SprintAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprintStart);
 		EIC->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprintEnd);
 		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AHoldoverCharacter::InteractPressed);
+		EIC->BindAction(SprayAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprayStarted);
+		EIC->BindAction(SprayAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprayStopped);
+	}
+}
+
+void AHoldoverCharacter::SprayStarted(const FInputActionValue& Value)
+{
+	if (SprayComponent)
+	{
+		SprayComponent->SetSpraying(true);
+	}
+}
+
+void AHoldoverCharacter::SprayStopped(const FInputActionValue& Value)
+{
+	if (SprayComponent)
+	{
+		SprayComponent->SetSpraying(false);
 	}
 }
 

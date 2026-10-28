@@ -85,9 +85,26 @@ spawn_mesh("RampFloor", CUBE, (0, 0, -20), scale=(60, 60, 0.4))
 spawn_mesh("DeicingPad", CUBE, (0, 1500, 1), scale=(12, 16, 0.05))
 
 # --- required clear locations (markers; gameplay actors land here later) ---
-spawn_mesh("MARKER_AircraftParking", CUBE, (0, 2600, 400), scale=(6, 10, 4))
 spawn_mesh("MARKER_IcePatch", CYL, (-1800, 800, 5), scale=(3, 3, 0.05))
 spawn_mesh("MARKER_JetBlastVolume", CUBE, (0, 4200, 300), scale=(10, 4, 3))
+
+# --- test aircraft: one AHoldoverAircraft + four labelled surface sections ---
+spawn_class("TestAircraft", unreal.HoldoverAircraft, (0, 2600, 0))
+
+
+def spawn_section(label, section_name, loc, scale):
+    actor = spawn_actor(unreal.HoldoverSurfaceSection, loc, (0, 0, 0))
+    actor.set_actor_label(label)
+    actor.set_editor_property("section_name", section_name)
+    actor.set_actor_scale3d(unreal.Vector(*scale))
+    return actor
+
+
+spawn_section("AC_Nose", "Nose", (0, 3400, 150), (1.5, 1.5, 1.5))
+spawn_section("AC_Fuselage", "Fuselage", (0, 2800, 150), (1.5, 3, 1.2))
+spawn_section("AC_LeftWing", "LeftWing", (-450, 2800, 120), (4, 1.5, 0.3))
+spawn_section("AC_RightWing", "RightWing", (450, 2800, 120), (4, 1.5, 0.3))
+spawn_section("AC_Tail", "Tail", (0, 2200, 250), (1.2, 1, 1.5))
 
 # --- refill station (interactable test object next to it) ---
 spawn_mesh("RefillStation", CUBE, (2200, -1500, 120), scale=(2, 2, 1.2))

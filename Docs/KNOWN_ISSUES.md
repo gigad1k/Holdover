@@ -10,6 +10,9 @@
 - MCP server is **loopback-only, unauthenticated** — never expose port 8000.
 
 ## Editor / build
+- **Actors without a root component spawn at the origin** — `spawn_actor_from_class` writes the
+  spawn transform to the root; no root = no placement. Give every actor a scene root
+  (cost us an "aircraft registered 0 sections" bug).
 - **`unreal.Rotator` positional constructor is `(roll, pitch, yaw)`**, not `(pitch, yaw, roll)` like
   the editor UI. A spawned DirectionalLight with positive pitch points AWAY from the scene and the
   whole map renders black (SkyAtmosphere computes a night sky). `Tools/build_ramp_greybox.py` maps

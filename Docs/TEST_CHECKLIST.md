@@ -1,13 +1,19 @@
 # TEST CHECKLIST
 _(Source: build plan §8. Re-run after significant changes. Mark results with date + build.)_
 
-## Treatment rules — _not yet implemented (Phase 3–4)_
-- [ ] A hit on scenery does not change aircraft values.
-- [ ] Spraying section A does not change section B.
-- [ ] Type I increases cleanliness and consumes only Type I fluid.
+## Treatment rules — partially implemented (Phase 3: Type I only)
+- [x] Spraying section A does not change section B — automation test PASS (2026-10-28).
+- [x] Type I increases cleanliness and consumes only Type I fluid (2026-10-28).
+- [x] Server validates spray range before state changes (`ServerSpray`) (2026-10-28).
+- [x] Empty tank stops treatment (`TypeIFluid <= 0` guard) — **manual**: spray until empty,
+      confirm HUD shows 0% and cleaning stops; E on the test cube refills (2026-10-28).
+- [ ] **Manual**: hold LMB on one section of the test aircraft → its % rises on HUD, other
+      sections and the aircraft total stay unchanged; percentage on screen matches server state
+      (check in a 2-player PIE session that both HUDs agree).
+- [ ] A hit on scenery does not change aircraft values. _(trace only hits `AHoldoverSurfaceSection`;
+      verify manually)_
 - [ ] Type IV cannot fully protect a dirty section.
 - [ ] Type IV increases protection and consumes only Type IV fluid.
-- [ ] Empty tank stops treatment and shows a clear warning.
 - [ ] Holdover does not start while required sections remain incomplete.
 - [ ] Worse weather changes the timer/degradation according to configured values.
 - [ ] Expired holdover blocks clearance and requires valid retreatment.

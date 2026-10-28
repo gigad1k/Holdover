@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-10-28 — Phase 3: spray & per-section treatment
+- `AHoldoverSurfaceSection`: replicated `CleanlinessPercent`/`ProtectionPercent`, clean threshold,
+  clamped `ApplyCleaning`/`ApplyProtection` (server-side).
+- `AHoldoverAircraft`: gathers nearby sections (radius), exposes overall cleanliness / all-clean
+  state. Test aircraft in `L_RampGreybox` (Nose/Fuselage/LeftWing/RightWing/Tail, labelled `AC_*`).
+- `UHoldoverSprayComponent` on the character: hold **Left Mouse** to spray; owning client traces,
+  `ServerSpray` validates range + fluid and applies Type I cleaning at a throttled rate; Type I
+  tank with consumption + refill (E on the test cube).
+- HUD: target section progress, aircraft-wide total, tank level, spray line placeholder.
+- Automation test `Holdover.Treatment.SectionIndependenceAndClamp` — **PASS** via MCP
+  (AutomationTestToolset). PIE: "Aircraft registered 5 surface sections" on server + client.
+- Evidence: `Docs/evidence/phase3_aircraft.png`.
+- Fixed: `AHoldoverAircraft` had no root component so it spawned at the origin (0 sections
+  gathered); now has a scene root.
+
 ## 2026-10-28 — Phase 2: greybox ramp + interaction
 - `L_RampGreybox` (`Content/Holdover/Maps/`): greybox apron built from engine basic shapes —
   deicing pad, aircraft-parking / ice-patch / jet-blast markers, refill station, light poles,

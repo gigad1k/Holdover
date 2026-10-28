@@ -6,7 +6,9 @@
 #include "GameFramework/HUD.h"
 #include "HoldoverHUD.generated.h"
 
-/** Greybox HUD: centre reticle + interaction prompt. */
+class AHoldoverSurfaceSection;
+
+/** Greybox HUD: centre reticle, interaction prompt, treatment progress, spray placeholder. */
 UCLASS()
 class HOLDOVER_API AHoldoverHUD : public AHUD
 {
