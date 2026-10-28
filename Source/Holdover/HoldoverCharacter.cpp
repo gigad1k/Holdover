@@ -42,6 +42,10 @@ AHoldoverCharacter::AHoldoverCharacter()
 	// Configure character movement
 	GetCharacterMovement()->BrakingDecelerationFalling = 1500.0f;
 	GetCharacterMovement()->AirControl = 0.5f;
+
+	// Network: standard replicated character movement for listen-server co-op
+	bReplicates = true;
+	SetReplicatingMovement(true);
 }
 
 void AHoldoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
