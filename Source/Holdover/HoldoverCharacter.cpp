@@ -143,10 +143,12 @@ void AHoldoverCharacter::EnsureExtraInputBindings(UInputComponent* InInputCompon
 		SprintAction = NewObject<UInputAction>(this, TEXT("IA_Sprint_Transient"));
 		InteractAction = NewObject<UInputAction>(this, TEXT("IA_Interact_Transient"));
 		SprayAction = NewObject<UInputAction>(this, TEXT("IA_Spray_Transient"));
+		FluidToggleAction = NewObject<UInputAction>(this, TEXT("IA_FluidToggle_Transient"));
 		HoldoverExtraContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Holdover_Transient"));
 		HoldoverExtraContext->MapKey(SprintAction, EKeys::LeftShift);
 		HoldoverExtraContext->MapKey(InteractAction, EKeys::E);
 		HoldoverExtraContext->MapKey(SprayAction, EKeys::LeftMouseButton);
+		HoldoverExtraContext->MapKey(FluidToggleAction, EKeys::Q);
 
 		if (const APlayerController* PC = Cast<APlayerController>(GetController()))
 		{
@@ -167,6 +169,15 @@ void AHoldoverCharacter::EnsureExtraInputBindings(UInputComponent* InInputCompon
 		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AHoldoverCharacter::InteractPressed);
 		EIC->BindAction(SprayAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprayStarted);
 		EIC->BindAction(SprayAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprayStopped);
+		EIC->BindAction(FluidToggleAction, ETriggerEvent::Started, this, &AHoldoverCharacter::ToggleFluid);
+	}
+}
+
+void AHoldoverCharacter::ToggleFluid(const FInputActionValue& Value)
+{
+	if (SprayComponent)
+	{
+		SprayComponent->ToggleActiveFluid();
 	}
 }
 

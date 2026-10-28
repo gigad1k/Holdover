@@ -7,8 +7,22 @@
 #include "EngineUtils.h"
 #include "HoldoverAircraft.h"
 #include "HoldoverCharacter.h"
+#include "HoldoverGameState.h"
 #include "HoldoverSprayComponent.h"
 #include "HoldoverSurfaceSection.h"
+
+namespace
+{
+	const TCHAR* HoldoverStateName(EHoldoverState State)
+	{
+		switch (State)
+		{
+		case EHoldoverState::HoldoverActive: return TEXT("HOLDOVER RUNNING");
+		case EHoldoverState::HoldoverExpired: return TEXT("HOLDOVER EXPIRED - RETREAT");
+		default: return TEXT("TREATMENT INCOMPLETE");
+		}
+	}
+}
 
 void AHoldoverHUD::DrawHUD()
 {
@@ -43,26 +57,55 @@ void AHoldoverHUD::DrawHUD()
 	if (Character && Character->GetSprayComponent())
 	{
 		const UHoldoverSprayComponent* Spray = Character->GetSprayComponent();
+		const bool bTypeI = Spray->ActiveFluidType == EHoldoverFluidType::TypeI;
 
-		// Aircraft-wide total (single test aircraft expected in greybox)
-		float Total = -1.f;
+		// Weather (replicated game state)
+		float Weather = 0.f;
+		if (const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>())
+		{
+			Weather = GS->WeatherSeverity;
+		}
+
+		FString Line1 = FString::Printf(TEXT("Fluid: %s   Type I: %.0f%%   Type IV: %.0f%%   Weather: %.0f%%"),
+			bTypeI ? TEXT("TYPE I (clean)") : TEXT("TYPE IV (protect)"),
+			Spray->TypeIFluid, Spray->TypeIVFluid, Weather * 100.f);
+
+		if (AHoldoverSurfaceSection* Section = Spray->CurrentTargetSection.Get())
+		{
+			Line1 += FString::Printf(TEXT("   Target: %s clean %.0f%% prot %.0f%%"),
+				*Section->SectionName.ToString(), Section->CleanlinessPercent, Section->ProtectionPercent);
+		}
+		DrawText(Line1, FLinearColor::White, 24.f, Canvas->SizeY - 72.f, UEngine::GetMediumFont(), 1.f);
+
+		// Aircraft holdover line (colour-coded)
 		for (TActorIterator<AHoldoverAircraft> It(GetWorld()); It; ++It)
 		{
-			Total = It->GetOverallCleanliness();
+			const AHoldoverAircraft* Aircraft = *It;
+			FLinearColor StateColor = FLinearColor::White;
+			if (Aircraft->HoldoverState == EHoldoverState::HoldoverActive)
+			{
+				StateColor = Aircraft->HoldoverRemaining < 30.f ? FLinearColor::Yellow : FLinearColor::Green;
+			}
+			else if (Aircraft->HoldoverState == EHoldoverState::HoldoverExpired)
+			{
+				StateColor = FLinearColor::Red;
+			}
+			const FString Line2 = FString::Printf(TEXT("%s   clean %.0f%%   prot %.0f%%   holdover %.0fs"),
+				HoldoverStateName(Aircraft->HoldoverState),
+				Aircraft->GetOverallCleanliness(), Aircraft->GetOverallProtection(), Aircraft->HoldoverRemaining);
+			DrawText(Line2, StateColor, 24.f, Canvas->SizeY - 48.f, UEngine::GetMediumFont(), 1.f);
 			break;
 		}
 
-		FString Status = FString::Printf(TEXT("Type I: %.0f%%"), Spray->TypeIFluid);
-		if (AHoldoverSurfaceSection* Section = Spray->CurrentTargetSection.Get())
+		// Fluid-rule hint near the reticle
+		if (!Spray->TargetHint.IsEmpty())
 		{
-			Status += FString::Printf(TEXT("   Target: %s %.0f%%"),
-				*Section->SectionName.ToString(), Section->CleanlinessPercent);
+			float TextW = 0.f;
+			float TextH = 0.f;
+			const FString Hint = Spray->TargetHint.ToString();
+			GetTextSize(Hint, TextW, TextH, UEngine::GetMediumFont(), 1.f);
+			DrawText(Hint, FLinearColor(1.f, 0.6f, 0.2f), CX - TextW * 0.5f, CY + 48.f, UEngine::GetMediumFont(), 1.f);
 		}
-		if (Total >= 0.f)
-		{
-			Status += FString::Printf(TEXT("   Aircraft: %.0f%%"), Total);
-		}
-		DrawText(Status, FLinearColor::White, 24.f, Canvas->SizeY - 48.f, UEngine::GetMediumFont(), 1.f);
 
 		// Spray placeholder: line from reticle to the target section
 		if (Spray->IsSpraying())

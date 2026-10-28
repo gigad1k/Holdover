@@ -43,6 +43,17 @@ float AHoldoverSurfaceSection::ApplyProtection(float Amount)
 	return ProtectionPercent - Before;
 }
 
+float AHoldoverSurfaceSection::ApplyDegradation(float Amount)
+{
+	if (Amount <= 0.f)
+	{
+		return 0.f;
+	}
+	const float Before = ProtectionPercent;
+	ProtectionPercent = FMath::Clamp(ProtectionPercent - Amount, 0.f, 100.f);
+	return Before - ProtectionPercent;
+}
+
 void AHoldoverSurfaceSection::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

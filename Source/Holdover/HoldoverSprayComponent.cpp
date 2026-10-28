@@ -3,6 +3,7 @@
 #include "HoldoverSprayComponent.h"
 #include "Camera/CameraComponent.h"
 #include "GameFramework/Character.h"
+#include "GameFramework/Pawn.h"
 #include "Holdover.h"
 #include "HoldoverCharacter.h"
 #include "HoldoverSurfaceSection.h"
@@ -20,6 +21,52 @@ void UHoldoverSprayComponent::SetSpraying(bool bEnabled)
 	RequestAccumulator = 0.f;
 }
 
+void UHoldoverSprayComponent::ToggleActiveFluid()
+{
+	ActiveFluidType = (ActiveFluidType == EHoldoverFluidType::TypeI)
+		? EHoldoverFluidType::TypeIV
+		: EHoldoverFluidType::TypeI;
+}
+
+void UHoldoverSprayComponent::RefillTanks()
+{
+	TypeIFluid = FluidCapacity;
+	TypeIVFluid = FluidCapacity;
+}
+
+bool UHoldoverSprayComponent::ApplySpray(AHoldoverSurfaceSection* Target, float DeltaSeconds)
+{
+	if (!IsValid(Target) || DeltaSeconds <= 0.f)
+	{
+		return false;
+	}
+
+	if (ActiveFluidType == EHoldoverFluidType::TypeI)
+	{
+		if (TypeIFluid <= 0.f)
+		{
+			return false;
+		}
+		Target->ApplyCleaning(CleanRatePerSecond * DeltaSeconds);
+		TypeIFluid = FMath::Max(0.f, TypeIFluid - TypeIUsePerSecond * DeltaSeconds);
+		return true;
+	}
+
+	// Type IV: wrong fluid on a dirty section — rejected by rule.
+	if (!Target->IsClean())
+	{
+		UE_LOG(LogHoldover, Verbose, TEXT("Type IV rejected (section not clean): %s"), *Target->GetName());
+		return false;
+	}
+	if (TypeIVFluid <= 0.f)
+	{
+		return false;
+	}
+	Target->ApplyProtection(ProtectRatePerSecond * DeltaSeconds);
+	TypeIVFluid = FMath::Max(0.f, TypeIVFluid - TypeIVUsePerSecond * DeltaSeconds);
+	return true;
+}
+
 void UHoldoverSprayComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
@@ -35,6 +82,7 @@ void UHoldoverSprayComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	if (!bSpraying)
 	{
 		CurrentTargetSection.Reset();
+		TargetHint = FText::GetEmpty();
 		return;
 	}
 
@@ -55,6 +103,7 @@ void UHoldoverSprayComponent::TickComponent(float DeltaTime, ELevelTick TickType
 void UHoldoverSprayComponent::UpdateTargetFromTrace()
 {
 	CurrentTargetSection.Reset();
+	TargetHint = FText::GetEmpty();
 
 	const AActor* Owner = GetOwner();
 	if (!Owner)
@@ -78,6 +127,20 @@ void UHoldoverSprayComponent::UpdateTargetFromTrace()
 		if (AHoldoverSurfaceSection* Section = Cast<AHoldoverSurfaceSection>(Hit.GetActor()))
 		{
 			CurrentTargetSection = Section;
+
+			// Cosmetic pre-validation hint (the server enforces the real rules).
+			if (ActiveFluidType == EHoldoverFluidType::TypeIV && !Section->IsClean())
+			{
+				TargetHint = FText::FromString(TEXT("Section not clean - use Type I first"));
+			}
+			else if (ActiveFluidType == EHoldoverFluidType::TypeI && TypeIFluid <= 0.f)
+			{
+				TargetHint = FText::FromString(TEXT("Type I tank empty - refill (E)"));
+			}
+			else if (ActiveFluidType == EHoldoverFluidType::TypeIV && TypeIVFluid <= 0.f)
+			{
+				TargetHint = FText::FromString(TEXT("Type IV tank empty - refill (E)"));
+			}
 		}
 	}
 }
@@ -97,25 +160,17 @@ void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection
 		return;
 	}
 
-	if (TypeIFluid <= 0.f)
-	{
-		return;
-	}
-
-	const float CleanAmount = CleanRatePerSecond * DeltaSeconds;
-	const float FluidAmount = FluidUsePerSecond * DeltaSeconds;
-
-	Target->ApplyCleaning(CleanAmount);
-	TypeIFluid = FMath::Max(0.f, TypeIFluid - FluidAmount);
+	ApplySpray(Target, DeltaSeconds);
 }
 
 void UHoldoverSprayComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(UHoldoverSprayComponent, TypeIFluid);
+	DOREPLIFETIME(UHoldoverSprayComponent, TypeIVFluid);
 }
 
 void UHoldoverSprayComponent::OnRep_Fluid()
 {
-	// HUD reads TypeIFluid directly.
+	// HUD reads the tank levels directly.
 }

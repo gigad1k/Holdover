@@ -31,12 +31,12 @@ void AHoldoverTestInteractable::Interact_Implementation(AActor* Interactor)
 	UE_LOG(LogHoldover, Display, TEXT("TestInteractable '%s' interacted by '%s'"), *GetName(),
 		Interactor ? *Interactor->GetName() : TEXT("null"));
 
-	// Greybox behaviour: refills the interactor's Type I tank (Phase 4 turns this into a real refill station).
+	// Greybox behaviour: refills the interactor's tanks (Phase 4 turns this into a real refill station).
 	if (AHoldoverCharacter* Character = Cast<AHoldoverCharacter>(Interactor))
 	{
 		if (UHoldoverSprayComponent* Spray = Character->GetSprayComponent())
 		{
-			Spray->RefillTypeI();
+			Spray->RefillTanks();
 		}
 	}
 

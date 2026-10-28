@@ -99,6 +99,9 @@ protected:
 	void SprayStarted(const FInputActionValue& Value);
 	void SprayStopped(const FInputActionValue& Value);
 
+	/** Toggle Type I / Type IV (bound to Q via transient action) */
+	void ToggleFluid(const FInputActionValue& Value);
+
 	/** UE 5.8 removed BindKey: sprint/interact/spray use runtime-created actions + mapping context. */
 	void EnsureExtraInputBindings(UInputComponent* InputComponent);
 
@@ -110,6 +113,9 @@ protected:
 
 	UPROPERTY(Transient)
 	UInputAction* SprayAction;
+
+	UPROPERTY(Transient)
+	UInputAction* FluidToggleAction;
 
 	UPROPERTY(Transient)
 	class UInputMappingContext* HoldoverExtraContext;

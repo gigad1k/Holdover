@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-10-28 — Phase 4: Type IV, tanks, weather, holdover
+- `UHoldoverSprayComponent`: two tanks (Type I / Type IV) with separate rates/capacities, **Q** to
+  toggle active fluid; `ApplySpray` core rules — Type I cleans, Type IV protects **clean sections
+  only** (wrong-fluid rejected), empty tanks stop treatment. Refill covers both tanks.
+- `AHoldoverGameState`: replicated server-authoritative `WeatherSeverity` (auto-ramping in greybox).
+- `AHoldoverAircraft`: deterministic `SimulateTreatment(dt, weather)` state machine —
+  weather degrades protection, holdover starts only when all sections are clean+protected,
+  burns faster with weather, expiry resets protection (retreatment), valid retreatment restarts
+  the clock. `EHoldoverState` + `HoldoverRemaining` replicated.
+- HUD: active fluid, both tanks, weather %, holdover state/timer colour-coded
+  (green/yellow/red), wrong-fluid hints.
+- Tests: `FluidRules` + `HoldoverStateMachine` + `SectionIndependenceAndClamp` — **all PASS** via
+  MCP. Fixed a same-tick burn on holdover start (clock now starts at full duration).
+
 ## 2026-10-28 — Phase 3: spray & per-section treatment
 - `AHoldoverSurfaceSection`: replicated `CleanlinessPercent`/`ProtectionPercent`, clean threshold,
   clamped `ApplyCleaning`/`ApplyProtection` (server-side).

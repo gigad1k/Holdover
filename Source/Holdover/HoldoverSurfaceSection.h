@@ -35,14 +35,23 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Treatment")
 	float CleanThreshold = 95.f;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Treatment")
+	float ProtectionThreshold = 95.f;
+
 	UFUNCTION(BlueprintCallable, Category = "Treatment")
 	bool IsClean() const { return CleanlinessPercent >= CleanThreshold; }
+
+	UFUNCTION(BlueprintCallable, Category = "Treatment")
+	bool IsProtected() const { return ProtectionPercent >= ProtectionThreshold; }
 
 	/** Server-side: raise cleanliness. Returns the amount actually applied. */
 	float ApplyCleaning(float Amount);
 
 	/** Server-side: raise protection. Returns the amount actually applied. */
 	float ApplyProtection(float Amount);
+
+	/** Server-side: weather-driven protection loss. Returns the amount actually lost. */
+	float ApplyDegradation(float Amount);
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
