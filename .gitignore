@@ -13,3 +13,6 @@ Build/
 
 # MiMoCode session metadata
 .mimocode/
+
+# local debug scripts
+Tools/probe_*.py
