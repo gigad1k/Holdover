@@ -6,9 +6,15 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
+#include "EnhancedInputSubsystems.h"
+#include "InputAction.h"
 #include "InputActionValue.h"
+#include "InputMappingContext.h"
 #include "GameFramework/CharacterMovementComponent.h"
+#include "GameFramework/PlayerController.h"
 #include "Holdover.h"
+#include "HoldoverHUD.h"
+#include "HoldoverInteractableInterface.h"
 
 AHoldoverCharacter::AHoldoverCharacter()
 {
@@ -63,6 +69,9 @@ void AHoldoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		// Looking/Aiming
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AHoldoverCharacter::LookInput);
 		EnhancedInputComponent->BindAction(MouseLookAction, ETriggerEvent::Triggered, this, &AHoldoverCharacter::LookInput);
+
+		// Sprint + interact (transient actions; UE 5.8 has no BindKey)
+		EnsureExtraInputBindings(InputComponent);
 	}
 	else
 	{
@@ -121,4 +130,135 @@ void AHoldoverCharacter::DoJumpEnd()
 {
 	// pass StopJumping to the character
 	StopJumping();
+}
+
+void AHoldoverCharacter::EnsureExtraInputBindings(UInputComponent* InInputComponent)
+{
+	if (!SprintAction)
+	{
+		SprintAction = NewObject<UInputAction>(this, TEXT("IA_Sprint_Transient"));
+		InteractAction = NewObject<UInputAction>(this, TEXT("IA_Interact_Transient"));
+		HoldoverExtraContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Holdover_Transient"));
+		HoldoverExtraContext->MapKey(SprintAction, EKeys::LeftShift);
+		HoldoverExtraContext->MapKey(InteractAction, EKeys::E);
+
+		if (const APlayerController* PC = Cast<APlayerController>(GetController()))
+		{
+			if (ULocalPlayer* LP = PC->GetLocalPlayer())
+			{
+				if (UEnhancedInputLocalPlayerSubsystem* Sub = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+				{
+					Sub->AddMappingContext(HoldoverExtraContext, 100);
+				}
+			}
+		}
+	}
+
+	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InInputComponent))
+	{
+		EIC->BindAction(SprintAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprintStart);
+		EIC->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprintEnd);
+		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AHoldoverCharacter::InteractPressed);
+	}
+}
+
+void AHoldoverCharacter::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	if (IsLocallyControlled())
+	{
+		UpdateInteractionPrompt();
+	}
+}
+
+void AHoldoverCharacter::SprintStart(const FInputActionValue& Value)
+{
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->MaxWalkSpeed = Move->GetClass()->GetDefaultObject<UCharacterMovementComponent>()->MaxWalkSpeed * SprintSpeedMultiplier;
+	}
+}
+
+void AHoldoverCharacter::SprintEnd(const FInputActionValue& Value)
+{
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->MaxWalkSpeed = Move->GetClass()->GetDefaultObject<UCharacterMovementComponent>()->MaxWalkSpeed;
+	}
+}
+
+void AHoldoverCharacter::InteractPressed(const FInputActionValue& Value)
+{
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverInteract), false, this);
+
+	const FVector Start = FirstPersonCameraComponent ? FirstPersonCameraComponent->GetComponentLocation() : GetActorLocation();
+	const FVector End = Start + (GetControlRotation().Vector() * InteractionDistance);
+
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	{
+		if (AActor* Target = Hit.GetActor())
+		{
+			if (Target->GetClass()->ImplementsInterface(UHoldoverInteractableInterface::StaticClass()))
+			{
+				if (HasAuthority())
+				{
+					IHoldoverInteractableInterface::Execute_Interact(Target, this);
+				}
+				else
+				{
+					ServerInteract(Target);
+				}
+			}
+		}
+	}
+}
+
+void AHoldoverCharacter::ServerInteract_Implementation(AActor* Target)
+{
+	if (!IsValid(Target) ||
+		!Target->GetClass()->ImplementsInterface(UHoldoverInteractableInterface::StaticClass()))
+	{
+		return;
+	}
+
+	// Server-side range validation (generous slack for latency)
+	if (FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) > FMath::Square(InteractionDistance * 2.f))
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Interact rejected (out of range): %s -> %s"), *GetName(), *Target->GetName());
+		return;
+	}
+
+	IHoldoverInteractableInterface::Execute_Interact(Target, this);
+}
+
+void AHoldoverCharacter::UpdateInteractionPrompt()
+{
+	FText Prompt;
+
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverInteractPrompt), false, this);
+
+	const FVector Start = FirstPersonCameraComponent ? FirstPersonCameraComponent->GetComponentLocation() : GetActorLocation();
+	const FVector End = Start + (GetControlRotation().Vector() * InteractionDistance);
+
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	{
+		if (AActor* Target = Hit.GetActor())
+		{
+			if (Target->GetClass()->ImplementsInterface(UHoldoverInteractableInterface::StaticClass()))
+			{
+				Prompt = IHoldoverInteractableInterface::Execute_GetInteractionPrompt(Target);
+			}
+		}
+	}
+
+	if (const APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (AHoldoverHUD* HUD = Cast<AHoldoverHUD>(PC->GetHUD()))
+		{
+			HUD->InteractionPrompt = Prompt;
+		}
+	}
 }

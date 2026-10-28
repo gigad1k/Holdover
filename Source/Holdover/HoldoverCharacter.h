@@ -80,7 +80,41 @@ protected:
 
 	/** Set up input action bindings */
 	virtual void SetupPlayerInputComponent(UInputComponent* InputComponent) override;
-	
+
+	virtual void Tick(float DeltaSeconds) override;
+
+	/** Sprint (bound to Left Shift via transient action) */
+	void SprintStart(const FInputActionValue& Value);
+	void SprintEnd(const FInputActionValue& Value);
+
+	/** Interact (bound to E via transient action): trace from camera and call the target's interact */
+	void InteractPressed(const FInputActionValue& Value);
+
+	/** UE 5.8 removed BindKey: sprint/interact use runtime-created actions + mapping context. */
+	void EnsureExtraInputBindings(UInputComponent* InputComponent);
+
+	UPROPERTY(Transient)
+	UInputAction* SprintAction;
+
+	UPROPERTY(Transient)
+	UInputAction* InteractAction;
+
+	UPROPERTY(Transient)
+	class UInputMappingContext* HoldoverExtraContext;
+
+	/** Client-side cosmetic prompt refresh via a short camera trace */
+	void UpdateInteractionPrompt();
+
+	/** Server-validated interaction. Clients request; the server range-checks and applies. */
+	UFUNCTION(Server, Reliable)
+	void ServerInteract(AActor* Target);
+
+	UPROPERTY(EditDefaultsOnly, Category = "Movement")
+	float SprintSpeedMultiplier = 1.75f;
+
+	UPROPERTY(EditDefaultsOnly, Category = "Interaction")
+	float InteractionDistance = 500.f;
+
 
 public:
 

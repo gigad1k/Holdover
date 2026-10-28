@@ -45,3 +45,11 @@ _(Source: build plan §8. Re-run after significant changes. Mark results with da
 - [x] Unreal MCP smoke test: initialize → list_toolsets (20 toolsets) → GetVisibleActors →
       StartPIE/StopPIE round-trip (2026-10-28).
 - [x] Template map `Lvl_FirstPerson` loads after module rename (CoreRedirects working).
+
+## Greybox ramp + interaction (Phase 2)
+- [x] `L_RampGreybox` builds/saves via `Tools/build_ramp_greybox.py` and is the startup map (2026-10-28).
+- [x] PIE on `L_RampGreybox` runs with 2-player listen server; clean shutdown, no errors (2026-10-28).
+- [x] Evidence screenshot captured (`Docs/evidence/phase2_ramp_pie.png`).
+- [ ] **Manual**: walk the ramp (WASD, Left Shift sprint), verify scale/collision feels right,
+      look at the test cube → prompt "Press E - Test Interact" appears → press E → cube flips
+      green/orange and log line `TestInteractable ... interacted by` appears in Output Log.

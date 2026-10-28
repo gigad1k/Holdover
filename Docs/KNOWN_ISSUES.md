@@ -10,6 +10,16 @@
 - MCP server is **loopback-only, unauthenticated** — never expose port 8000.
 
 ## Editor / build
+- **`unreal.Rotator` positional constructor is `(roll, pitch, yaw)`**, not `(pitch, yaw, roll)` like
+  the editor UI. A spawned DirectionalLight with positive pitch points AWAY from the scene and the
+  whole map renders black (SkyAtmosphere computes a night sky). `Tools/build_ramp_greybox.py` maps
+  `(pitch, yaw, roll)` explicitly via keywords — keep that convention.
+- **Every editor/commandlet start logs 2 "GameFeatureData / Asset Manager settings" errors**
+  (from the GameFeatures plugin enabled by AllToolsets). Harmless for development; silence by
+  adding a `GameFeatureData` PrimaryAssetTypesToScan entry if it becomes noisy.
+- **`new_level` cannot overwrite an existing map asset and `delete_asset` silently fails to delete
+  a just-saved map** (returns True, asset still exists). No `save_current_level_to`/`save_current_level_as`
+  in this build's Python bindings. The builder is idempotent by loading + clearing + `save_current_level`.
 - **Live Coding blocks UBT**: close the editor before CLI builds (or use Live Coding from the editor).
 - **PIE settings are per-user**: `Saved/Config/WindowsEditor/EditorPerProjectUserSettings.ini` overrides
   `Config/DefaultEditorPerProjectUserSettings.ini`. If PIE starts with the wrong player count / net mode,
