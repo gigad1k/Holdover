@@ -125,10 +125,42 @@ spawn_class("TestInteractable_Refill", unreal.HoldoverTestInteractable, (2200, -
 truck = spawn_class("DeicingTruck", unreal.HoldoverDeicingTruck, (-2500, 1500, 100), rot=(0, 90, 0))
 truck.set_actor_label("DeicingTruck")
 
-# --- light poles at the corners ---
+# --- emissive lamp material (Lumen treats emissive surfaces as GI sources) ---
+def _ensure_glow_material():
+    path = "/Game/Holdover/Materials/M_PoleHeadGlow"
+    if unreal.EditorAssetLibrary.does_asset_exist(path):
+        return unreal.load_asset(path)
+    try:
+        asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+        mat = asset_tools.create_asset("M_PoleHeadGlow", "/Game/Holdover/Materials",
+                                       unreal.Material, unreal.MaterialFactoryNew())
+        mel = unreal.MaterialEditingLibrary
+        em = mel.create_material_expression(mat, unreal.MaterialExpressionConstant3Vector, -400, 0)
+        em.set_editor_property("const_vector", unreal.LinearColor(40.0, 24.0, 10.0, 1.0))  # HDR warm
+        mel.connect_material_property(em, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+        mel.recompile_material(mat)
+        return mat
+    except Exception as e:
+        unreal.log_warning(f"[build_ramp_greybox] glow material failed: {e} — lamp heads stay grey")
+        return None
+
+_glow = _ensure_glow_material()
+
+# --- light poles at the corners: emissive head + real warm point light ---
 for i, (x, y) in enumerate([(-2600, -2600), (2600, -2600), (-2600, 2600), (2600, 2600)]):
     spawn_mesh(f"LightPole_{i}_Pole", CYL, (x, y, 300), scale=(0.35, 0.35, 6))
-    spawn_mesh(f"LightPole_{i}_Head", CUBE, (x, y, 620), scale=(1.2, 1.2, 0.3))
+    head = spawn_mesh(f"LightPole_{i}_Head", CUBE, (x, y, 620), scale=(1.2, 1.2, 0.3))
+    if _glow:
+        head.get_component_by_class(unreal.StaticMeshComponent).set_material(0, _glow)
+    lamp = spawn_class(f"LightPole_{i}_Lamp", unreal.PointLight, (x, y, 580))
+    plc = lamp.get_component_by_class(unreal.PointLightComponent)
+    plc.set_intensity(5000.0)
+    plc.set_light_color(unreal.LinearColor(1.0, 0.62, 0.28, 1.0))  # warm sodium amber
+    for _n, _v in (("attenuation_radius", 2600.0), ("source_radius", 25.0)):
+        try:
+            plc.set_editor_property(_n, _v)
+        except Exception:
+            unreal.log_warning(f"[build_ramp_greybox] lamp property '{_n}' not set")
 
 # --- safety cones along the pad edge ---
 for i in range(6):
@@ -138,22 +170,72 @@ for i in range(6):
 # --- player start, facing the pad ---
 spawn_class("PlayerStart", unreal.PlayerStart, (0, -2200, 120), rot=(0, 90, 0))
 
-# --- lighting: negative pitch so the sun points DOWN at the scene ---
+# --- lighting: cold moonlit NIGHT grade (Lumen GI stays the runtime baseline) ---
+# Negative pitch so the "moon" points DOWN at the scene (see gotcha at top).
+# Low intensity + cold blue color: this reads as moonlight, not daylight.
 sun = spawn_class("Sun_Directional", unreal.DirectionalLight, (0, 0, 1200), rot=(-45, 30, 0))
 dlc = sun.get_component_by_class(unreal.DirectionalLightComponent)
-dlc.set_intensity(6.0)
+dlc.set_intensity(1.2)  # lux-scale moonlight (daylight was 6.0)
+dlc.set_light_color(unreal.LinearColor(0.55, 0.68, 1.0, 1.0))  # cold blue-white
 dlc.set_editor_property("atmosphere_sun_light", True)
 
+# Dim cold skylight = Lumen's night ambient base (real-time capture feeds GI).
 sky = spawn_class("SkyLight", unreal.SkyLight, (0, 0, 1000))
 slc = sky.get_component_by_class(unreal.SkyLightComponent)
-slc.set_intensity(1.0)
+slc.set_intensity(0.4)
+slc.set_light_color(unreal.LinearColor(0.6, 0.72, 1.0, 1.0))
 try:
     slc.set_editor_property("real_time_capture", True)
 except Exception:
     unreal.SystemLibrary.execute_console_command(None, "r.SkyLightRealTimeCapture 1")
 
 spawn_class("SkyAtmosphere", unreal.SkyAtmosphere, (0, 0, 0))
-spawn_class("HeightFog", unreal.ExponentialHeightFog, (0, 0, 0))
+
+# Controlled night haze: low density so gameplay stays readable, volumetric
+# fog on so the lamp cones read in Lumen.
+fog = spawn_class("HeightFog", unreal.ExponentialHeightFog, (0, 0, 0))
+fgc = fog.get_component_by_class(unreal.ExponentialHeightFogComponent)
+for _n, _v in (("fog_density", 0.02),
+               ("fog_inscattering_luminance", unreal.LinearColor(0.01, 0.02, 0.05, 1.0)),
+               ("fog_max_opacity", 0.75),
+               ("volumetric_fog", True)):
+    try:
+        fgc.set_editor_property(_n, _v)
+    except Exception:
+        unreal.log_warning(f"[build_ramp_greybox] fog property '{_n}' not set")
+
+# --- post process: unbound night grade (exposure clamped so the ramp never
+# blows out under lamp light or crushes to black in the shadows) ---
+ppv = spawn_class("PPV_Night", unreal.PostProcessVolume, (0, 0, 0))
+try:
+    ppv.set_editor_property("unbound", True)
+    ppv.set_editor_property("priority", 1.0)
+except Exception:
+    unreal.log_warning("[build_ramp_greybox] PPV unbound/priority not set")
+
+
+def _set_pp(names, value, label):
+    """Try each candidate property name until one sticks (API names vary by version)."""
+    for n in names:
+        try:
+            _settings.set_editor_property(n, value)
+            return
+        except Exception:
+            continue
+    unreal.log_warning(f"[build_ramp_greybox] PP setting '{label}' not set")
+
+
+_settings = ppv.get_editor_property("settings")
+# Fixed exposure at EV ~-1.5: deterministic dark night, immune to metering swings.
+_set_pp(("b_override_auto_exposure_fixed_brightness",
+         "override_auto_exposure_fixed_brightness"), True, "fixed exposure")
+_set_pp(("auto_exposure_fixed_brightness",), -1.5, "exposure value")
+_set_pp(("b_override_white_temp", "override_white_temp"), True, "white temp")
+_set_pp(("white_temp",), 8500.0, "white temp value")
+try:
+    ppv.set_editor_property("settings", _settings)
+except Exception:
+    unreal.log_warning("[build_ramp_greybox] PP settings write-back failed")
 
 if not les.save_current_level():
     raise RuntimeError("failed to save level")
