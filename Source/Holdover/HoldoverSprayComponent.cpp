@@ -2,9 +2,11 @@
 
 #include "HoldoverSprayComponent.h"
 #include "Camera/CameraComponent.h"
+#include "Components/AudioComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "Holdover.h"
+#include "HoldoverAudioLibrary.h"
 #include "HoldoverCharacter.h"
 #include "HoldoverSurfaceSection.h"
 #include "Net/UnrealNetwork.h"
@@ -19,6 +21,24 @@ void UHoldoverSprayComponent::SetSpraying(bool bEnabled)
 {
 	bSpraying = bEnabled;
 	RequestAccumulator = 0.f;
+
+	// Cosmetic spray hiss on the owning client only. The stop is unconditional so
+	// server-side stops are harmless no-ops and owner-side stops always land.
+	if (bEnabled)
+	{
+		const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+		if (OwnerPawn && OwnerPawn->IsLocallyControlled() && !HissComponent)
+		{
+			HissComponent = UHoldoverAudioLibrary::Play2D(GetOwner(), FName("spray_hiss"), 0.9f, true);
+			UE_LOG(LogHoldover, Display, TEXT("spray hiss start (%s)"), *GetNameSafe(GetOwner()));
+		}
+	}
+	else if (HissComponent)
+	{
+		HissComponent->Stop();
+		HissComponent = nullptr;
+		UE_LOG(LogHoldover, Display, TEXT("spray hiss stop (%s)"), *GetNameSafe(GetOwner()));
+	}
 }
 
 void UHoldoverSprayComponent::ToggleActiveFluid()
@@ -26,6 +46,10 @@ void UHoldoverSprayComponent::ToggleActiveFluid()
 	ActiveFluidType = (ActiveFluidType == EHoldoverFluidType::TypeI)
 		? EHoldoverFluidType::TypeIV
 		: EHoldoverFluidType::TypeI;
+
+	// Owner applies the flip optimistically for HUD responsiveness; the server
+	// value (from this RPC) is authoritative and replicates back.
+	ServerSetFluid(ActiveFluidType);
 }
 
 void UHoldoverSprayComponent::RefillTanks()
@@ -170,11 +194,17 @@ void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection
 	ApplySpray(Target, DeltaSeconds);
 }
 
+void UHoldoverSprayComponent::ServerSetFluid_Implementation(EHoldoverFluidType NewFluid)
+{
+	ActiveFluidType = NewFluid;
+}
+
 void UHoldoverSprayComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(UHoldoverSprayComponent, TypeIFluid);
 	DOREPLIFETIME(UHoldoverSprayComponent, TypeIVFluid);
+	DOREPLIFETIME(UHoldoverSprayComponent, ActiveFluidType);
 }
 
 void UHoldoverSprayComponent::OnRep_Fluid()

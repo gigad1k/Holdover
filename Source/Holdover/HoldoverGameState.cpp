@@ -1,6 +1,7 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "HoldoverGameState.h"
+#include "HoldoverAudioLibrary.h"
 #include "Net/UnrealNetwork.h"
 
 AHoldoverGameState::AHoldoverGameState()
@@ -98,6 +99,11 @@ void AHoldoverGameState::AddDispatch(const FString& Line)
 		DispatchFeed.RemoveAt(0, DispatchFeed.Num() - 8, EAllowShrinking::No);
 	}
 	UE_LOG(LogTemp, Display, TEXT("DISPATCH: %s"), *Line);
+
+	if (GetWorld())
+	{
+		UHoldoverAudioLibrary::Play2D(this, FName("radio_beep"), 0.6f);
+	}
 }
 
 void AHoldoverGameState::Tick(float DeltaSeconds)
@@ -136,5 +142,9 @@ void AHoldoverGameState::OnRep_Shift()
 
 void AHoldoverGameState::OnRep_Dispatch()
 {
-	// HUD reads the replicated feed directly.
+	// Radio beep on clients for each replicated dispatch update.
+	if (GetWorld() && !HasAuthority())
+	{
+		UHoldoverAudioLibrary::Play2D(this, FName("radio_beep"), 0.6f);
+	}
 }

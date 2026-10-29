@@ -71,8 +71,13 @@ public:
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	virtual void UnPossessed() override;
+	virtual void OnRep_Controller() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 protected:
+	// Owner-safe spray cleanup on every possession-lifetime edge (P7-2).
+	void StopSprayLocal();
 	UFUNCTION(Server, Reliable)
 	void ServerSetBoom(float InYaw, float InExtension);
 

@@ -162,6 +162,35 @@ void AHoldoverDeicingTruck::ServerExit_Implementation()
 	}
 }
 
+void AHoldoverDeicingTruck::StopSprayLocal()
+{
+	if (SprayComponent)
+	{
+		SprayComponent->SetSpraying(false);
+		SprayComponent->SetSprayOrigin(nullptr);
+	}
+}
+
+void AHoldoverDeicingTruck::UnPossessed()
+{
+	StopSprayLocal();
+	Super::UnPossessed();
+}
+
+void AHoldoverDeicingTruck::OnRep_Controller()
+{
+	// Fires on the owning client when possession leaves the truck (exit,
+	// server eviction, disconnect cleanup) — kill any local spray loop (P7-2).
+	StopSprayLocal();
+	Super::OnRep_Controller();
+}
+
+void AHoldoverDeicingTruck::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	StopSprayLocal();
+	Super::EndPlay(EndPlayReason);
+}
+
 void AHoldoverDeicingTruck::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -220,6 +249,11 @@ void AHoldoverDeicingTruck::SprayStopped(const FInputActionValue& Value)
 
 void AHoldoverDeicingTruck::ExitPressed(const FInputActionValue& Value)
 {
+	// Owner-side: kill the looping spray hiss before the server handles the exit.
+	if (SprayComponent)
+	{
+		SprayComponent->SetSpraying(false);
+	}
 	TryExit();
 }
 

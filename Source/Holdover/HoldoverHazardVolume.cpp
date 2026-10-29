@@ -5,6 +5,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Holdover.h"
+#include "HoldoverAudioLibrary.h"
 #include "HoldoverGameState.h"
 
 AHoldoverHazardVolume::AHoldoverHazardVolume()
@@ -22,7 +23,18 @@ void AHoldoverHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, 
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	ACharacter* Character = Cast<ACharacter>(OtherActor);
-	if (!Character || !HasAuthority())
+	if (!Character)
+	{
+		return;
+	}
+
+	// Local-only collision cue for the player who hit the hazard.
+	if (Character->IsLocallyControlled())
+	{
+		UHoldoverAudioLibrary::Play2D(this, FName("collision_cue"), 0.9f);
+	}
+
+	if (!HasAuthority())
 	{
 		return;
 	}
