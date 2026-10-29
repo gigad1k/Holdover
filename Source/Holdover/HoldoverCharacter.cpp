@@ -13,6 +13,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Holdover.h"
+#include "HoldoverAudioLibrary.h"
 #include "HoldoverHUD.h"
 #include "HoldoverInteractableInterface.h"
 #include "HoldoverSprayComponent.h"
@@ -56,6 +57,17 @@ AHoldoverCharacter::AHoldoverCharacter()
 	// Network: standard replicated character movement for listen-server co-op
 	bReplicates = true;
 	SetReplicatingMovement(true);
+}
+
+void AHoldoverCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Wind ambience for the locally controlled player.
+	if (IsLocallyControlled())
+	{
+		UHoldoverAudioLibrary::Play2D(this, FName("wind_loop"), 0.5f, true);
+	}
 }
 
 void AHoldoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)

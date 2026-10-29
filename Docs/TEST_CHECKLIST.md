@@ -73,3 +73,27 @@ _(Source: build plan §8. Re-run after significant changes. Mark results with da
       section from the nozzle ? E exits back to the character. Confirm the HUD works in the truck.
 - [ ] **Manual (two clients)**: boom movement visible on the second client.
 - [ ] Driving (behind bDrivingEnabled): arrows move the truck � tested separately.
+
+## HUD and feedback (Phase 7)
+- [x] UMG HUD shows shift line, fluid/tanks, weather and target section — PIE capture PASS (2026-10-29).
+- [x] Departure board shows aircraft holdover state, countdown and totals — capture PASS (2026-10-29).
+- [x] Dispatcher feed shows the latest radio lines — visible in PIE capture (2026-10-29).
+- [x] Placeholder audio assets import with loud missing-asset warnings — 4 cues via
+      `Tools/build_placeholder_audio.py` (2026-10-29).
+- [x] Radio beep (dispatch), spray hiss (spraying), wind loop (ambience), collision cue (hazards)
+      wired in code (2026-10-29).
+- [ ] **Manual listening test**: hear radio beep on dispatch, hiss while spraying, wind loop on
+      spawn, collision cue on ice/jet blast.
+- [ ] **Manual**: HUD legible in BOTH PIE windows (shift line + feed were occluded in the automated
+      capture by the overlapping second window); empty-tank hint; collision penalty shown in
+      pay/deductions.
+- [x] P7-1 shift-results banner renders at shift end — PIE 2p capture PASS (2026-10-29,
+      `Docs/evidence/phase75_p7_results_banner.png`, red "RESTRUCTURED" at expiry).
+- [x] P7-3 urgency colour ramp logic (green running / yellow <30s / red expired) — automation
+      PASS (`Holdover.UI.BoardStateColor`, 2026-10-29). **Manual**: see the colours live on the
+      board during an active/expired holdover.
+- [x] P7-4 audio loop seams pin to zero — generator self-check PASS (spray_hiss + wind_loop
+      endpoints 0.000000, 2026-10-29). **Manual listening test**: confirm no seam click.
+- [ ] **Manual (client seat)**: P7-2 spray-hiss lifecycle — enter truck, spray, exit; confirm no
+      lingering hiss (start/stop is logged as `spray hiss start/stop`).
+- [x] Full automation suite re-run after UMG/audio/P7 changes — all 7 tests PASS (2026-10-29).

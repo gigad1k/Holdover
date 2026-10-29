@@ -1,5 +1,48 @@
 # CHANGELOG
 
+## 2026-10-29 — Phase 7: UMG HUD + dispatcher feed + placeholder audio
+- UMG HUD: `AHoldoverHUD` keeps the canvas centre reticle + interaction prompt and creates
+  `UHoldoverHUDWidget` on BeginPlay; the widget builds its tree in C++ (`RebuildWidget`) and reads
+  live game state every tick — shift line (SHIFT n/quota, time, pay, deductions), treatment line
+  (active fluid, Type I/Type IV tank %, weather %, current target section clean/prot, fluid-rule
+  hint), `UHoldoverDepartureBoardWidget` (aircraft holdover state + countdown + overall
+  clean/protection), `UHoldoverDispatcherFeedWidget` (last 5 dispatch lines),
+  `UHoldoverShiftResultsWidget` (SHIFT PASSED!/RESTRUCTURED + breakdown, visible only when the
+  shift ended).
+- Treatment line is pawn-agnostic (works from the truck too).
+- `UHoldoverAudioLibrary` (LoadSound/Play2D) loads `/Game/Holdover/Audio/<Name>` and logs a LOUD
+  'PLACEHOLDER AUDIO MISSING' warning instead of failing silently.
+  `Tools/build_placeholder_audio.py` generates 4 deterministic stdlib WAVs and imports them as
+  USoundWave assets: radio_beep, spray_hiss (loop), wind_loop (loop), collision_cue; loop flags
+  set on the two loops (looping comes from `USoundWave::bLooping` — `SpawnSound2D` has no loop
+  parameter).
+- Audio wiring: wind_loop on character BeginPlay (locally controlled), radio_beep on server
+  `AddDispatch` + client `OnRep_Dispatch`, spray_hiss while spraying (owning client), collision_cue
+  when the local player enters a hazard volume.
+- Fixed: `HoldoverPanelWidgets.h` was missing `RebuildWidget` declarations (compile error) — added;
+  `SlateCore` added to `Holdover.Build.cs` (`FCoreStyle` link error).
+- Code-review fixes (`Docs/CODE_REVIEW_2026-10-29.md` P7-1..P7-4): **P7-1** the shift-results
+  banner is parent-driven — a self-`Collapsed` UserWidget stops receiving `NativeTick`, so the
+  banner could never re-show; `UHoldoverHUDWidget::NativeTick` now owns its visibility. **P7-2**
+  the spray-hiss stops on every possession-lifetime edge (`UnPossessed`/`OnRep_Controller`/
+  `EndPlay` + owner-side exit; the `SetSpraying(false)` stop branch is unconditional) and hiss
+  start/stop is logged. **P7-3** the departure board restores the holdover urgency colour ramp
+  (running=green, <30s=yellow, expired=red) as pure `HoldoverStateColor` with an automation
+  test. **P7-4** `build_placeholder_audio.py` `detrend()` algebra fixed (pins both loop
+  endpoints to zero — the old form left the first sample nonzero and clicked at the seam);
+  the generator now asserts the seam.
+- Multiplayer fluid bug fixed in this tree (MP-1): active fluid is server-authoritative
+  (`ServerSetFluid` RPC + replicated `ActiveFluidType`), so remote clients spray what their HUD
+  says. Client-seat verification is Phase 7.5 step 2.
+- Verification (2026-10-29): `HoldoverEditor` Win64 Development build clean; **7/7** automation
+  tests PASS (incl. new `Holdover.UI.BoardStateColor`); placeholder audio regenerated with seam
+  self-check (`spray_hiss`/`wind_loop` endpoints 0.000000), no missing-audio warnings; 2-player
+  listen-server PIE clean (join, shift start dispatch) and the shift-end banner renders red
+  "RESTRUCTURED" at expiry — evidence `Docs/evidence/phase75_p7_results_banner.png` (client
+  window; the host window's banner area is occluded by the editor Message Log in that capture).
+  P7-2 hiss lifecycle and P7-3 colour states in live play still need manual playtest (no input
+  injection automation yet).
+
 ## 2026-10-29 — Phase 6: deicing truck & boom
 - `AHoldoverDeicingTruck`: parked truck with rotating/extending boom + basket nozzle (replicated
   `BoomYaw`/`BoomExtension`, clamped `SetBoom`), enter/exit via interact (server-authoritative
