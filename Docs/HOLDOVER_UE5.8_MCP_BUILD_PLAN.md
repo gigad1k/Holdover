@@ -349,6 +349,40 @@ Build this after the on-foot loop is fun.
 
 **Done when:** players can understand what to do and why a departure can or cannot be cleared without reading developer logs.
 
+### Phase 7.5 — commit blockers and the client-truth pass
+
+Added 2026-10-29 from the external review (`Docs/CODE_REVIEW_2026-10-29.md`). The review verified that several core systems only work for the listen-server host because everything was tested from the host's seat. This pulls the critical half of Phase 9 forward; issue IDs below refer to the review.
+
+**Tasks**
+- Fix the Phase 7 working-tree bugs before committing: shift-results banner never appears (P7-1), spray-hiss loop leaks on truck exit (P7-2), holdover urgency colours regressed (P7-3), audio-loop `detrend()` seam click (P7-4). Then commit Phase 7.
+- Replication pass, in order: fluid type via Server RPC + replication (MP-1); replicated speed state for sprint/ice replacing raw `MaxWalkSpeed` writes (MP-2); truck occupant disconnect/unpossess safety (MP-3); spray origin valid on the owning client (MP-4); aircraft departure/reset movement replicated (MP-5); replicated truck occupancy + collision state (MP-6); boom RPC made unreliable/rate-limited/clamped with `COND_SkipOwner` (MP-7); `ServerSpray` dt clamp and origin-aware range check (MP-8); input-mapping-context lifecycle cleanup (MP-9).
+- Checklist honesty: downgrade the overstated "test PASS" items and re-encode `TEST_CHECKLIST.md` to UTF-8 (PROC-3); add a committed headless test runner (PROC-4).
+
+**Agent prompt**
+
+> Read `Docs/CODE_REVIEW_2026-10-29.md` first. Fix P7-1 through P7-4 in the uncommitted Phase 7 work, verify in PIE, and commit Phase 7. Then fix MP-1 through MP-9 in that order, smallest correct change per issue, server-authoritative throughout. Every MP fix must be verified from the CLIENT seat: run PIE as client (not listen host) with net emulation (PktLag=120, PktLoss=5) and confirm the specific scenario in the review — a remote client sprays Type IV and protection rises, sprints without rubber-banding, operates the boom end-to-end from the basket, sees the plane depart, and a disconnect while in the truck leaves the truck usable. Add automation tests where the logic is world-free (dt clamp, speed state, boom validation). Update TEST_CHECKLIST.md honestly per PROC-3 and add the headless test runner per PROC-4. Do not start any Phase 8 art work. Do not claim a fix works until the client-seat test proves it.
+
+**Done when:** a remote client can complete the entire clean → protect → holdover → depart loop correctly, with host and client agreeing on all replicated state, and Phase 7 is committed.
+
+### Phase 7.6 — find the fun
+
+Added 2026-10-29 from the external review. The team is far ahead of the sprint table on systems; this phase spends that surplus on design before art amplifies the loop. Design gaps DES-1..DES-6 and simulation defects SIM-1..SIM-5 in `Docs/CODE_REVIEW_2026-10-29.md` are the backlog.
+
+**Tasks**
+- Second (then third) aircraft with staggered arrivals and independent holdover clocks; explicit section→aircraft ownership (DES-1, SIM-5); move to the plan's own first-shift spec (two aircraft, 8 minutes, quota 2).
+- `AHoldoverPlayerState` with per-player pay/penalty/contribution attribution surfaced on the dispatcher and results screen (DES-2).
+- One-tank-per-player rule chosen at the refill station, with timed (not instant/free) refills, to force the clean→protect relay (DES-2, SIM-4).
+- Dispatcher line bank: 60–100 short reactive lines keyed to event + repetition + blame, in the RESTRUCTURED voice; ice becomes a brief physical stumble, jet blast gets a per-player cooldown and client-predicted launch (DES-3).
+- Weather reset/randomisation per shift with squalls and lulls (SIM-1); precipitation re-contaminates unprotected sections (SIM-3); holdover aborts cost something or degradation pauses during an active holdover (SIM-2); net pay = money − deductions with penalties that can fail a shift and per-aircraft deadlines (SIM-4).
+- `AHoldoverShiftData` / `UHoldoverFluidData` data assets replacing scattered tuning constants, plus 3–5 escalating shift profiles (DES-4, DES-5).
+- A 2–4 player playtest after each item, with one written gate: did anyone laugh unprompted; did players talk to coordinate (DES-6).
+
+**Agent prompt**
+
+> Read `Docs/CODE_REVIEW_2026-10-29.md` sections C and D. Implement the Phase 7.6 tasks one at a time, playtesting in a 2-player listen-server session after each. Keep every rule server-authoritative and deterministic, extend `SimulateTreatment`-style world-free logic with tests, and put all new tuning in the `AHoldoverShiftData`/`UHoldoverFluidData` data assets rather than new scattered constants. Dispatcher lines are content, not code: load them from a data table keyed by event, repetition count and blamed player. After each item, record in the changelog whether the coordination/laughter gate moved. Do not begin the art pass until the triage tension (two competing holdover clocks) demonstrably creates player conversation.
+
+**Done when:** a 2-player session produces visible triage decisions between competing clocks, attributed mistakes on the results screen, and dispatcher reactions — and the shift profile, not code edits, controls difficulty.
+
 ### Phase 8 — atmosphere and art pass
 
 **Tasks**
@@ -364,6 +398,8 @@ Build this after the on-foot loop is fun.
 **Done when:** the ramp has a distinctive look and remains readable and playable.
 
 ### Phase 9 — multiplayer integration and hardening
+
+The critical replication fixes were pulled forward into Phase 7.5 (see `Docs/CODE_REVIEW_2026-10-29.md`, MP-1..MP-9). Phase 9 is now the formal verification pass over those fixes plus the remaining items: world-based multiplayer automation tests (PROC-1), late-join correctness, 3–4 player sessions, and the start of Steam online-subsystem work (PROC-6).
 
 **Tasks**
 - Replicate surface values, fluid consumption, weather, timers, aircraft states, score, penalties and departure events.
