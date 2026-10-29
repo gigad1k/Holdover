@@ -14,6 +14,7 @@
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "InputMappingContext.h"
+#include "HoldoverHUD.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
 
@@ -223,6 +224,17 @@ void AHoldoverDeicingTruck::ExitPressed(const FInputActionValue& Value)
 	TryExit();
 }
 
+void AHoldoverDeicingTruck::BoardTogglePressed(const FInputActionValue& Value)
+{
+	if (const APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (AHoldoverHUD* HUD = Cast<AHoldoverHUD>(PC->GetHUD()))
+		{
+			HUD->ToggleDepartureBoard();
+		}
+	}
+}
+
 void AHoldoverDeicingTruck::DriveForward(const FInputActionValue& Value)
 {
 	if (bDrivingEnabled)
@@ -272,6 +284,7 @@ void AHoldoverDeicingTruck::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	UInputAction* Retract = NewObject<UInputAction>(this, TEXT("IA_BoomRetract_Transient"));
 	UInputAction* Spray = NewObject<UInputAction>(this, TEXT("IA_TruckSpray_Transient"));
 	UInputAction* Exit = NewObject<UInputAction>(this, TEXT("IA_TruckExit_Transient"));
+	UInputAction* Board = NewObject<UInputAction>(this, TEXT("IA_TruckBoardToggle_Transient"));
 	UInputAction* Fwd = NewObject<UInputAction>(this, TEXT("IA_DriveFwd_Transient"));
 	UInputAction* Back = NewObject<UInputAction>(this, TEXT("IA_DriveBack_Transient"));
 	UInputAction* TurnL = NewObject<UInputAction>(this, TEXT("IA_DriveTurnL_Transient"));
@@ -284,6 +297,7 @@ void AHoldoverDeicingTruck::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	IMC->MapKey(Retract, EKeys::S);
 	IMC->MapKey(Spray, EKeys::LeftMouseButton);
 	IMC->MapKey(Exit, EKeys::E);
+	IMC->MapKey(Board, EKeys::Tab);
 	IMC->MapKey(Fwd, EKeys::Up);
 	IMC->MapKey(Back, EKeys::Down);
 	IMC->MapKey(TurnL, EKeys::Left);
@@ -307,6 +321,7 @@ void AHoldoverDeicingTruck::SetupPlayerInputComponent(UInputComponent* PlayerInp
 	EIC->BindAction(Spray, ETriggerEvent::Started, this, &AHoldoverDeicingTruck::SprayStarted);
 	EIC->BindAction(Spray, ETriggerEvent::Completed, this, &AHoldoverDeicingTruck::SprayStopped);
 	EIC->BindAction(Exit, ETriggerEvent::Started, this, &AHoldoverDeicingTruck::ExitPressed);
+	EIC->BindAction(Board, ETriggerEvent::Started, this, &AHoldoverDeicingTruck::BoardTogglePressed);
 	EIC->BindAction(Fwd, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveForward);
 	EIC->BindAction(Back, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveBackward);
 	EIC->BindAction(TurnL, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveTurnLeft);

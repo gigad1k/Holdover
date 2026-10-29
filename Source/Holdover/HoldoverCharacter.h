@@ -102,6 +102,9 @@ protected:
 	/** Toggle Type I / Type IV (bound to Q via transient action) */
 	void ToggleFluid(const FInputActionValue& Value);
 
+	/** Toggle the fullscreen departure board (bound to Tab via transient action) */
+	void BoardTogglePressed(const FInputActionValue& Value);
+
 	/** UE 5.8 removed BindKey: sprint/interact/spray use runtime-created actions + mapping context. */
 	void EnsureExtraInputBindings(UInputComponent* InputComponent);
 
@@ -116,6 +119,9 @@ protected:
 
 	UPROPERTY(Transient)
 	UInputAction* FluidToggleAction;
+
+	UPROPERTY(Transient)
+	UInputAction* BoardToggleAction;
 
 	UPROPERTY(Transient)
 	class UInputMappingContext* HoldoverExtraContext;

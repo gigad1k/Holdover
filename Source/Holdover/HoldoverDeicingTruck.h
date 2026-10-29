@@ -94,6 +94,7 @@ protected:
 	void SprayStarted(const struct FInputActionValue& Value);
 	void SprayStopped(const struct FInputActionValue& Value);
 	void ExitPressed(const struct FInputActionValue& Value);
+	void BoardTogglePressed(const struct FInputActionValue& Value);
 	void DriveForward(const struct FInputActionValue& Value);
 	void DriveBackward(const struct FInputActionValue& Value);
 	void DriveTurnLeft(const struct FInputActionValue& Value);
