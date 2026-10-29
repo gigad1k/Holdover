@@ -16,3 +16,4 @@ Build/
 
 # local debug scripts
 Tools/probe_*.py
+__pycache__/

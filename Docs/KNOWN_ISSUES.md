@@ -1,5 +1,16 @@
 # KNOWN ISSUES
 
+## Engine access
+- **UE 5.8 is not installed on every team machine.** Phases 0–6 were authored elsewhere; a fresh
+  checkout has no `Binaries/`, `Intermediate/` or `Saved/`. Any headless script, build or PIE
+  verification must run on an engine machine.
+- **Builder Python property names are try/except-guarded** (`PPV_Night` exposure/white-temp, fog
+  properties) because struct member names drift between engine builds. A `[build_ramp_greybox] … not set`
+  warning in the log means that name changed in 5.8 — fix it in `Tools/build_ramp_greybox.py`,
+  don't drop the setting.
+- **DefaultScalability.ini entries marked VERIFY** are cvars that could not be confirmed against a
+  live 5.8 editor. Invalid cvars fail silently in-game; check via console on first PIE after sync.
+
 ## Tooling / MCP
 - **`GetVisibleActors` only reports the editor world**, not PIE worlds — during PIE you cannot enumerate
   spawned pawns with it. Use `LogsToolset.GetLogEntries` for PIE evidence.

@@ -44,6 +44,21 @@ _(Source: build plan §8. Re-run after significant changes. Mark results with da
 - [x] Weather and holdover are not independently advanced by every client. _(server-only ticks)_
 - [ ] Host and client agree on final score and result. _(Phase 5; manual 2p check pending)_
 
+## Rendering — GI night pass (authored 2026-10-29, requires an engine machine)
+- [ ] Headless rebuild runs clean: `UnrealEditor-Cmd.exe <project>.uproject -run=pythonscript -script="<repo>/Tools/build_ramp_greybox.py" -unattended -nosplash`
+      — no tracebacks; log ends `[build_ramp_greybox] saved …`.
+- [ ] No `[build_ramp_greybox] … not set` warnings in the log (if any: a Python property name
+      drifted in 5.8 — fix in `Tools/build_ramp_greybox.py`, do not delete the setting).
+- [ ] Asset `M_PoleHeadGlow` exists under `/Game/Holdover/Materials` and the 4 pole heads glow.
+- [ ] PIE: ramp reads as a cold night (not daylight); warm lamp pools on the apron; HUD legible.
+- [ ] Exposure stable: no blow-out under lamps, shadows not crushed to black (fixed EV −1.5).
+- [ ] Lumen sanity: lamp glow bounces into nearby surfaces (GI), not just direct light.
+- [ ] Volumetric fog visible but gameplay-readable.
+- [ ] Scalability tiers apply: set quality level Low → volumetrics off; back up → on.
+      `r.Lumen.HardwareRayTracing` reads **0 at every default tier**; only Ultra/@3 sets 1.
+- [ ] Path Tracer view mode renders the night ramp (DX12/SM6); capture a high-res still.
+- [ ] Evidence screenshot saved to `Docs/evidence/phase_gi_night.png`.
+
 ## Packaged build — _not yet packaged (Phase 10)_
 - [ ] Launches outside Unreal Editor.
 - [ ] Correct default map and GameMode load.
@@ -66,10 +81,10 @@ _(Source: build plan §8. Re-run after significant changes. Mark results with da
       green/orange and log line `TestInteractable ... interacted by` appears in Output Log.
 
 ## Truck & boom (Phase 6)
-- [x] Boom rotation/extension clamped and applied � test PASS (2026-10-29).
-- [x] Enter/exit occupancy is server-authoritative (possession) � build + tests PASS.
+- [x] Boom rotation/extension clamped and applied � test PASS (2026-10-29).
+- [x] Enter/exit occupancy is server-authoritative (possession) � build + tests PASS.
 - [x] Spray from the nozzle goes through the shared spray rules (2026-10-29).
 - [ ] **Manual**: E on the truck to enter ? A/D/W/S to aim the boom at a wing ? LMB sprays the
       section from the nozzle ? E exits back to the character. Confirm the HUD works in the truck.
 - [ ] **Manual (two clients)**: boom movement visible on the second client.
-- [ ] Driving (behind bDrivingEnabled): arrows move the truck � tested separately.
+- [ ] Driving (behind bDrivingEnabled): arrows move the truck � tested separately.

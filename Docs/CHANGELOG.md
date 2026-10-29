@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-10-29 — GI pass 1: night lighting rig + scalability tiers (UNVERIFIED — engine pass pending)
+- `Tools/build_ramp_greybox.py` night grade: moonlight sun (intensity 1.2, cold blue-white, negative
+  pitch kept), dim cold skylight (0.4, real-time capture), volumetric height fog (density 0.02, cold
+  in-scatter), 4 warm sodium pole point lights (5000 cd, radius 2600) on the existing corner poles,
+  new emissive material `M_PoleHeadGlow` (HDR warm constant → MP_EMISSIVE_COLOR, Lumen GI source)
+  assigned to the pole heads, unbound `PPV_Night` (fixed exposure EV −1.5, 8500 K white temp).
+  All risky property writes are try/except with `log_warning` (Python API names vary by engine
+  build — a "… not set" warning means that name drifted in 5.8, fix in place).
+- `Config/DefaultScalability.ini` (new): GI/reflection quality tiers Low→Ultra. **`r.Lumen.HardwareRayTracing=0`
+  at every default tier** — ray tracing stays OFF by default for wide-audience system requirements;
+  the Ultra tier (@3) is the single opt-in path for RT-capable GPUs (settings menu toggle comes later).
+- **Status: authored on a machine WITHOUT UE 5.8 — NOT yet run.** Execute the headless rebuild and
+  the new "Rendering" checklist in `Docs/TEST_CHECKLIST.md` on an engine machine before trusting it.
+- Palette rule (locked in planning): orange = Type I, green = Type IV (fluids only); red = holdover
+  clock only; everything else cold monochrome. Warm lamp light is lighting, not UI — unaffected.
+
 ## 2026-10-29 — Phase 6: deicing truck & boom
 - `AHoldoverDeicingTruck`: parked truck with rotating/extending boom + basket nozzle (replicated
   `BoomYaw`/`BoomExtension`, clamped `SetBoom`), enter/exit via interact (server-authoritative
