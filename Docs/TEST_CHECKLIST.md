@@ -64,3 +64,12 @@ _(Source: build plan Â§8. Re-run after significant changes. Mark results with da
 - [ ] **Manual**: walk the ramp (WASD, Left Shift sprint), verify scale/collision feels right,
       look at the test cube â†’ prompt "Press E - Test Interact" appears â†’ press E â†’ cube flips
       green/orange and log line `TestInteractable ... interacted by` appears in Output Log.
+
+## Truck & boom (Phase 6)
+- [x] Boom rotation/extension clamped and applied — test PASS (2026-10-29).
+- [x] Enter/exit occupancy is server-authoritative (possession) — build + tests PASS.
+- [x] Spray from the nozzle goes through the shared spray rules (2026-10-29).
+- [ ] **Manual**: E on the truck to enter ? A/D/W/S to aim the boom at a wing ? LMB sprays the
+      section from the nozzle ? E exits back to the character. Confirm the HUD works in the truck.
+- [ ] **Manual (two clients)**: boom movement visible on the second client.
+- [ ] Driving (behind bDrivingEnabled): arrows move the truck — tested separately.

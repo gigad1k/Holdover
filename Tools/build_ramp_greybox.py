@@ -121,6 +121,10 @@ spawn_section("AC_Tail", "Tail", (0, 2200, 250), (1.2, 1, 1.5))
 spawn_mesh("RefillStation", CUBE, (2200, -1500, 120), scale=(2, 2, 1.2))
 spawn_class("TestInteractable_Refill", unreal.HoldoverTestInteractable, (2200, -900, 50))
 
+# --- deicing truck (stationary boom; driving behind a config flag) ---
+truck = spawn_class("DeicingTruck", unreal.HoldoverDeicingTruck, (-2500, 1500, 100), rot=(0, 90, 0))
+truck.set_actor_label("DeicingTruck")
+
 # --- light poles at the corners ---
 for i, (x, y) in enumerate([(-2600, -2600), (2600, -2600), (-2600, 2600), (2600, 2600)]):
     spawn_mesh(f"LightPole_{i}_Pole", CYL, (x, y, 300), scale=(0.35, 0.35, 6))

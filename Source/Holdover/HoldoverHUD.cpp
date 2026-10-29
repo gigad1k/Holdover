@@ -51,12 +51,11 @@ void AHoldoverHUD::DrawHUD()
 		DrawText(Prompt, FLinearColor::Yellow, CX - TextW * 0.5f, CY + 24.f, UEngine::GetLargeFont(), 1.f);
 	}
 
-	// Treatment status (from the locally controlled character)
+	// Treatment status (works for the character and the deicing truck alike)
 	const APawn* Pawn = GetOwningPawn();
-	const AHoldoverCharacter* Character = Cast<AHoldoverCharacter>(Pawn);
-	if (Character && Character->GetSprayComponent())
+	const UHoldoverSprayComponent* Spray = Pawn ? Pawn->FindComponentByClass<UHoldoverSprayComponent>() : nullptr;
+	if (Spray)
 	{
-		const UHoldoverSprayComponent* Spray = Character->GetSprayComponent();
 		const bool bTypeI = Spray->ActiveFluidType == EHoldoverFluidType::TypeI;
 
 		// Weather (replicated game state)

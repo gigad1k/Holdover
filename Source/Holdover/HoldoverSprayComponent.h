@@ -7,6 +7,7 @@
 #include "HoldoverSprayComponent.generated.h"
 
 class AHoldoverSurfaceSection;
+class USceneComponent;
 
 UENUM(BlueprintType)
 enum class EHoldoverFluidType : uint8
@@ -68,6 +69,16 @@ public:
 	/** Cosmetic client-side hint when the active fluid is wrong for the target. */
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Spray")
 	FText TargetHint;
+
+	/**
+	 * Optional spray origin (e.g. a truck nozzle). When set, traces start here
+	 * and aim along this component's forward vector instead of the owner actor.
+	 */
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Spray")
+	TWeakObjectPtr<USceneComponent> SprayOrigin;
+
+	UFUNCTION(BlueprintCallable, Category = "Spray")
+	void SetSprayOrigin(USceneComponent* Origin) { SprayOrigin = Origin; }
 
 	UFUNCTION(BlueprintCallable, Category = "Spray")
 	void SetSpraying(bool bEnabled);

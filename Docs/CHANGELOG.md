@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-10-29 — Phase 6: deicing truck & boom
+- `AHoldoverDeicingTruck`: parked truck with rotating/extending boom + basket nozzle (replicated
+  `BoomYaw`/`BoomExtension`, clamped `SetBoom`), enter/exit via interact (server-authoritative
+  possession; occupant character hidden/parked), spray from the nozzle through the shared
+  `UHoldoverSprayComponent` (`SprayOrigin` override). Arcade driving is modular behind
+  `bDrivingEnabled` (default **false** — parked-truck demo per the playbook).
+- `UHoldoverSprayComponent`: optional `SprayOrigin` so any pawn (truck nozzle) can spray.
+- HUD is pawn-agnostic (treatment panel works from the truck).
+- Controls in truck: A/D boom yaw, W/S extend/retract, LMB spray, E exit; arrows drive (flagged).
+- Test `Holdover.Truck.BoomClampAndApply` — **all 6 tests PASS** via MCP. PIE with the truck runs
+  clean (shift start dispatch, no errors).
+
 ## 2026-10-28 — Phase 5: hazards, scoring, shift loop
 - `AHoldoverGameState`: shift lifecycle (start/tick/end/restart), quota, on-time vs late
   departures, pay/deductions, pass/fail evaluation, replicated dispatcher feed (8 lines).

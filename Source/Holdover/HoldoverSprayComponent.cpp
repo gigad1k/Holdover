@@ -114,7 +114,14 @@ void UHoldoverSprayComponent::UpdateTargetFromTrace()
 	const AHoldoverCharacter* Character = Cast<AHoldoverCharacter>(Owner);
 	FVector Start = Owner->GetActorLocation();
 	FRotator Aim = Owner->GetActorRotation();
-	if (Character && Character->GetFirstPersonCameraComponent())
+
+	if (USceneComponent* Origin = SprayOrigin.Get())
+	{
+		// Truck nozzle / custom origin wins.
+		Start = Origin->GetComponentLocation();
+		Aim = Origin->GetComponentRotation();
+	}
+	else if (Character && Character->GetFirstPersonCameraComponent())
 	{
 		Start = Character->GetFirstPersonCameraComponent()->GetComponentLocation();
 		Aim = Character->GetControlRotation();

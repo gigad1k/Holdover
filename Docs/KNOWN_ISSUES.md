@@ -34,3 +34,8 @@
   Renamed module uses CoreRedirects (`Config/DefaultEngine.ini`) to keep template Blueprints alive —
   do not remove those redirects until the template content is replaced.
 - `Media/` template thumbnails and Horror/Shooter variants were pruned; `Content/FirstPerson` is placeholder.
+
+## Truck
+- **Driving is intentionally off** (DrivingEnabled=false): movement uses FloatingPawnMovement
+  without server move RPCs, so enabled driving is single-player-quality only until the Phase 9
+  multiplayer audit adds authoritative movement. Boom/occupancy/spray are server-authoritative.
