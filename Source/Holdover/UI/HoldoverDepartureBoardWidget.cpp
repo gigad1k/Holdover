@@ -199,12 +199,18 @@ void UHoldoverDepartureBoardWidget::NativeTick(const FGeometry& MyGeometry, floa
 
 	using namespace HoldoverUI;
 
-	// Rebuild only when the aircraft set changes.
-	const FString Signature = GetAircraftSignature();
-	if (Signature != LastSignature)
+	// Rebuild only when the aircraft set changes — throttled, because the
+	// 2026-10-29 review flagged per-tick TActorIterator scans as a smell.
+	RefreshTimer -= InDeltaTime;
+	if (RefreshTimer <= 0.f)
 	{
-		LastSignature = Signature;
-		RebuildRows();
+		RefreshTimer = 0.5f;
+		const FString Signature = GetAircraftSignature();
+		if (Signature != LastSignature)
+		{
+			LastSignature = Signature;
+			RebuildRows();
+		}
 	}
 
 	for (FDepartureRow& Row : Rows)

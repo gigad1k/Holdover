@@ -22,6 +22,13 @@ public:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	/**
+	 * Visibility is parent-driven (P7-1: a Collapsed UserWidget stops
+	 * receiving NativeTick, so a self-showing results screen never shows).
+	 * The owning HUD widget flips us visible at shift end, then calls this.
+	 */
+	void RefreshReport();
+
 protected:
 	void BuildTree();
 

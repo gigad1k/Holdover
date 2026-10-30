@@ -108,22 +108,23 @@ void UHoldoverShiftResultsWidget::NativeTick(const FGeometry& MyGeometry, float 
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
+	// Content refresh only — visibility is parent-driven (P7-1: a Collapsed
+	// UserWidget stops ticking, so this widget must never hide itself).
+	RefreshReport();
+}
+
+void UHoldoverShiftResultsWidget::RefreshReport()
+{
 	using namespace HoldoverUI;
 
-	AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
-	const bool bShow = GS && GS->ShiftState == EShiftState::ShiftEnded;
-	const ESlateVisibility Desired = bShow ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
-	if (GetVisibility() != Desired)
-	{
-		SetVisibility(Desired);
-	}
-	if (!bShow)
+	// Tree guard (Initialize normally runs via the parent; never deref before it).
+	if (!OnTimeText)
 	{
 		return;
 	}
 
-	// Tree guard (Initialize normally runs via the parent; never deref before it).
-	if (!OnTimeText)
+	AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
+	if (!GS || GS->ShiftState != EShiftState::ShiftEnded)
 	{
 		return;
 	}

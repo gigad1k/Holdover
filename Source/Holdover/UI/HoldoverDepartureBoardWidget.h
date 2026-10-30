@@ -45,4 +45,5 @@ protected:
 	TArray<FDepartureRow> Rows;
 
 	FString LastSignature;
+	float RefreshTimer = 0.f;
 };

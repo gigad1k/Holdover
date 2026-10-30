@@ -17,6 +17,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerController.h"
 #include "HoldoverAircraft.h"
+#include "HoldoverCharacter.h"
 #include "HoldoverGameState.h"
 #include "HoldoverHUD.h"
 #include "HoldoverSprayComponent.h"
@@ -380,6 +381,28 @@ void UHoldoverHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 		return;
 	}
 
+	// P7-1: a Collapsed UserWidget stops receiving NativeTick, so the results
+	// banner must never drive its own visibility — this root widget always
+	// ticks, so it owns the show/hide (and refreshes content on the frame
+	// the banner appears).
+	if (ResultsWidget)
+	{
+		const AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
+		const bool bShowResults = GS && GS->ShiftState == EShiftState::ShiftEnded;
+		const ESlateVisibility Desired = bShowResults ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed;
+		if (ResultsWidget->GetVisibility() != Desired)
+		{
+			ResultsWidget->SetVisibility(Desired);
+			if (bShowResults)
+			{
+				if (UHoldoverShiftResultsWidget* Report = Cast<UHoldoverShiftResultsWidget>(ResultsWidget.Get()))
+				{
+					Report->RefreshReport();
+				}
+			}
+		}
+	}
+
 	RefreshAircraftCache(InDeltaTime);
 	UpdateCenterStack();
 	UpdateHoldoverBoard();
@@ -542,9 +565,15 @@ void UHoldoverHUDWidget::UpdateCenterStack()
 	FString TargetStr;
 	FLinearColor TargetColor = TextDim();
 
-	if (const AHoldoverHUD* HUD = Cast<AHoldoverHUD>(PC ? PC->GetHUD() : nullptr))
+	// The character writes the prompt from its own tick; while possessing the
+	// truck that writer isn't ticking, so an unconditional read shows a stale
+	// prompt (2026-10-29 review, lower-severity list). Only show it on foot.
+	if (Cast<AHoldoverCharacter>(Pawn))
 	{
-		PromptStr = HUD->InteractionPrompt.ToString();
+		if (const AHoldoverHUD* HUD = Cast<AHoldoverHUD>(PC ? PC->GetHUD() : nullptr))
+		{
+			PromptStr = HUD->InteractionPrompt.ToString();
+		}
 	}
 
 	if (Spray)
