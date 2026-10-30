@@ -17,6 +17,7 @@
 #include "HoldoverHUD.h"
 #include "HoldoverInteractableInterface.h"
 #include "HoldoverSprayComponent.h"
+#include "Net/UnrealNetwork.h"
 
 AHoldoverCharacter::AHoldoverCharacter()
 {
@@ -62,6 +63,13 @@ AHoldoverCharacter::AHoldoverCharacter()
 void AHoldoverCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Capture the movement base once; all speed changes go through SpeedScale (MP-2).
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		BaseWalkSpeed = Move->MaxWalkSpeed;
+	}
+	ApplySpeedScale();
 
 	// Wind ambience for the locally controlled player.
 	if (IsLocallyControlled())
@@ -162,27 +170,57 @@ void AHoldoverCharacter::EnsureExtraInputBindings(UInputComponent* InInputCompon
 		HoldoverExtraContext->MapKey(SprayAction, EKeys::LeftMouseButton);
 		HoldoverExtraContext->MapKey(FluidToggleAction, EKeys::Q);
 
-		if (const APlayerController* PC = Cast<APlayerController>(GetController()))
+		if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InInputComponent))
 		{
-			if (ULocalPlayer* LP = PC->GetLocalPlayer())
-			{
-				if (UEnhancedInputLocalPlayerSubsystem* Sub = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
-				{
-					Sub->AddMappingContext(HoldoverExtraContext, 100);
-				}
-			}
+			EIC->BindAction(SprintAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprintStart);
+			EIC->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprintEnd);
+			EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AHoldoverCharacter::InteractPressed);
+			EIC->BindAction(SprayAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprayStarted);
+			EIC->BindAction(SprayAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprayStopped);
+			EIC->BindAction(FluidToggleAction, ETriggerEvent::Started, this, &AHoldoverCharacter::ToggleFluid);
 		}
 	}
 
-	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InInputComponent))
+	// MP-9: (re)apply on possession; removed again in UnPossessed/EndPlay. Priority
+	// 100 on foot — the truck's context takes 200 while possessed. The subsystem is
+	// cached because UnPossessed runs after Controller is already cleared.
+	if (const APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		EIC->BindAction(SprintAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprintStart);
-		EIC->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprintEnd);
-		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AHoldoverCharacter::InteractPressed);
-		EIC->BindAction(SprayAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprayStarted);
-		EIC->BindAction(SprayAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprayStopped);
-		EIC->BindAction(FluidToggleAction, ETriggerEvent::Started, this, &AHoldoverCharacter::ToggleFluid);
+		if (ULocalPlayer* LP = PC->GetLocalPlayer())
+		{
+			if (UEnhancedInputLocalPlayerSubsystem* Sub = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+			{
+				CachedInputSubsystem = Sub;
+				Sub->RemoveMappingContext(HoldoverExtraContext);
+				Sub->AddMappingContext(HoldoverExtraContext, 100);
+			}
+		}
 	}
+}
+
+void AHoldoverCharacter::RemoveHoldoverInputContext()
+{
+	if (!HoldoverExtraContext)
+	{
+		return;
+	}
+	if (UEnhancedInputLocalPlayerSubsystem* Sub = CachedInputSubsystem.Get())
+	{
+		Sub->RemoveMappingContext(HoldoverExtraContext);
+	}
+	CachedInputSubsystem.Reset();
+}
+
+void AHoldoverCharacter::UnPossessed()
+{
+	RemoveHoldoverInputContext();
+	Super::UnPossessed();
+}
+
+void AHoldoverCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	RemoveHoldoverInputContext();
+	Super::EndPlay(EndPlayReason);
 }
 
 void AHoldoverCharacter::ToggleFluid(const FInputActionValue& Value)
@@ -221,18 +259,84 @@ void AHoldoverCharacter::Tick(float DeltaSeconds)
 
 void AHoldoverCharacter::SprintStart(const FInputActionValue& Value)
 {
-	if (UCharacterMovementComponent* Move = GetCharacterMovement())
-	{
-		Move->MaxWalkSpeed = Move->GetClass()->GetDefaultObject<UCharacterMovementComponent>()->MaxWalkSpeed * SprintSpeedMultiplier;
-	}
+	SetSprintLocal(true);
+	ServerSetSprint(true);
 }
 
 void AHoldoverCharacter::SprintEnd(const FInputActionValue& Value)
 {
+	SetSprintLocal(false);
+	ServerSetSprint(false);
+}
+
+void AHoldoverCharacter::SetSprintLocal(bool bEnabled)
+{
+	bSprinting = bEnabled;
+	RecomputeSpeedScale();
+}
+
+void AHoldoverCharacter::ServerSetSprint_Implementation(bool bEnabled)
+{
+	bSprinting = bEnabled;
+	RecomputeSpeedScale();
+}
+
+void AHoldoverCharacter::SetIceSlowed(bool bSlowed, float Multiplier)
+{
+	IceScale = bSlowed ? Multiplier : 1.f;
+	RecomputeSpeedScale();
+}
+
+float AHoldoverCharacter::ComputeSpeedScale(bool bSprinting, float SprintScale, float IceScale)
+{
+	return (bSprinting ? SprintScale : 1.f) * IceScale;
+}
+
+void AHoldoverCharacter::RecomputeSpeedScale()
+{
+	SpeedScale = ComputeSpeedScale(bSprinting, SprintSpeedMultiplier, IceScale);
+	ApplySpeedScale();
+}
+
+void AHoldoverCharacter::ApplySpeedScale()
+{
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
-		Move->MaxWalkSpeed = Move->GetClass()->GetDefaultObject<UCharacterMovementComponent>()->MaxWalkSpeed;
+		if (BaseWalkSpeed <= 0.f)
+		{
+			BaseWalkSpeed = Move->MaxWalkSpeed;
+		}
+		Move->MaxWalkSpeed = BaseWalkSpeed * SpeedScale;
 	}
+}
+
+void AHoldoverCharacter::OnRep_SpeedScale()
+{
+	ApplySpeedScale();
+}
+
+void AHoldoverCharacter::SetVehicleHidden(bool bHiddenInVehicle)
+{
+	bVehicleHidden = bHiddenInVehicle;
+	ApplyVehicleHidden();
+}
+
+void AHoldoverCharacter::ApplyVehicleHidden()
+{
+	SetActorHiddenInGame(bVehicleHidden);
+	SetActorEnableCollision(!bVehicleHidden);
+}
+
+void AHoldoverCharacter::OnRep_VehicleHidden()
+{
+	ApplyVehicleHidden();
+}
+
+void AHoldoverCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AHoldoverCharacter, SpeedScale);
+	DOREPLIFETIME(AHoldoverCharacter, bVehicleHidden);
 }
 
 void AHoldoverCharacter::InteractPressed(const FInputActionValue& Value)

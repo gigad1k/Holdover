@@ -6,6 +6,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Holdover.h"
 #include "HoldoverAudioLibrary.h"
+#include "HoldoverCharacter.h"
 #include "HoldoverGameState.h"
 
 AHoldoverHazardVolume::AHoldoverHazardVolume()
@@ -41,9 +42,10 @@ void AHoldoverHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, 
 
 	if (HazardType == EHoldoverHazardType::Ice)
 	{
-		if (UCharacterMovementComponent* Move = Character->GetCharacterMovement())
+		// MP-2: speed changes go through the character's replicated speed state.
+		if (AHoldoverCharacter* HC = Cast<AHoldoverCharacter>(Character))
 		{
-			Move->MaxWalkSpeed *= IceSpeedMultiplier;
+			HC->SetIceSlowed(true, IceSpeedMultiplier);
 		}
 		if (AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>())
 		{
@@ -71,8 +73,8 @@ void AHoldoverHazardVolume::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AA
 		return;
 	}
 
-	if (UCharacterMovementComponent* Move = Character->GetCharacterMovement())
+	if (AHoldoverCharacter* HC = Cast<AHoldoverCharacter>(Character))
 	{
-		Move->MaxWalkSpeed /= IceSpeedMultiplier;
+		HC->SetIceSlowed(false, IceSpeedMultiplier);
 	}
 }

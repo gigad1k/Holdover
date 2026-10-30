@@ -133,3 +133,43 @@
 ## 2026-10-27 — Repo reset
 - Unity 6 URP template purged (zero game content); UE `.gitignore`/`.gitattributes` (Git LFS) added.
 - `Docs/` seeded with the UE 5.8 MCP build plan and master agent prompt (playbook).
+
+## 2026-10-30 - Phase 7.5 step 2: client-truth pass (MP-1..MP-9)
+
+Every fix verified from the CLIENT seat in PIE as client with net emulation (PktLag=120, PktLoss=5),
+driven by the new `HoldoverEditor` MCP toolset (`Source/HoldoverEditor/` - InjectKey/InjectMouseDelta/
+ExecConsole/TeleportPlayer/GetPawnInfo/ForceTreatment/GetSectionStates/GetTruckState).
+
+- **MP-1 fixed** - active fluid is server-authoritative (`ServerSetFluid` RPC + replicated
+  `ActiveFluidType`). Evidence: client Q-toggled to Type IV and Tail protection rose 0 -> 52
+  (tanks drained 100->40.8/65.6 on the client's own component).
+- **MP-2 fixed** - replicated `SpeedScale` state replaces raw MaxWalkSpeed writes; sprint and ice
+  multiply. Evidence: 600 walk / 1050 sprint / 300 ice / 525 ice+sprint / 600 after the full
+  enter-ice -> sprint -> leave-ice -> release sequence (the old permanent-2x bug is gone).
+  Test `Holdover.Movement.SpeedScale`.
+- **MP-3 fixed** - `AHoldoverPlayerController::PawnLeavingGame` saves a level-placed truck from
+  connection cleanup (evict + unpossess); `GameMode::Logout` evicts as well. Evidence:
+  `PawnLeavingGame: saving truck` -> truck alive `occupied=false` -> host enters
+  (`entered by C_0`) after the client disconnected while inside.
+- **MP-4 fixed** - truck spray origin set on every instance (constructor) so remote occupants'
+  traces come from the nozzle. Evidence: client spray from the truck consumed the truck's tanks
+  and hit sections.
+- **MP-5 fixed** - `SetReplicatingMovement(true)` on the aircraft. Evidence: client observed
+  `holdover=Departed` and `aircraftZ 0 -> 800` (replicated climb-out) after requesting clearance.
+- **MP-6 fixed** - occupancy replicated (`OccupantCharacter`) + replicated `bVehicleHidden`
+  collision state. Evidence: both instances report `occupied=true` after entry.
+- **MP-7 fixed** - `ServerSetBoom` Unreliable + yaw clamp + server rate validation +
+  `COND_SkipOwner`. Evidence: boom moved to `-120` (clamped at MaxAbsYaw) on both sides via the
+  RPC path under net emulation, no disconnects.
+- **MP-8 fixed** - `ClampSprayDt` (test `Holdover.Spray.DtClamp`) + origin-aware range check.
+  Evidence: no false range rejections across the treatment runs; the clamp held under the
+  3Hz-throttled secondary PIE world.
+- **MP-9 fixed** - input contexts created/bound once, removed on unpossess (cached subsystem),
+  truck priority 200 vs character 100. Evidence: repeated enter/exit cycles work from the client.
+- Departure interact unblocked: `AHoldoverSurfaceSection` forwards interact to its nearest
+  aircraft (the aircraft has no traceable collision - E-on-a-section is the departure path).
+- **P7-2 evidence closed**: `spray hiss stop` fires on exit-while-spraying from the client seat
+  (`TryExit` -> `ServerExit arrived: occupied=1` -> `exited back to`).
+- Engine findings (documented): `AController::Possess` calls the NEW pawn's `UnPossessed` mid-entry
+  (eviction must not live there); `AActor::Destroy` is non-virtual in 5.8 (use `PawnLeavingGame`).
+- Verification: 9/9 automation tests PASS via `Tools/run_tests.ps1` (headless, PROC-4).

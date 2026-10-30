@@ -176,22 +176,52 @@ void UHoldoverSprayComponent::UpdateTargetFromTrace()
 	}
 }
 
+float UHoldoverSprayComponent::ClampSprayDt(float RequestedDt, float Interval)
+{
+	if (RequestedDt <= 0.f || Interval <= 0.f)
+	{
+		return 0.f;
+	}
+	return FMath::Min(RequestedDt, Interval * 2.f);
+}
+
 void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection* Target, float DeltaSeconds)
 {
 	AActor* Owner = GetOwner();
-	if (!Owner || !IsValid(Target) || DeltaSeconds <= 0.f)
+	if (!Owner || !IsValid(Target))
 	{
 		return;
 	}
 
-	// Server-side range validation
-	if (FVector::DistSquared(Owner->GetActorLocation(), Target->GetActorLocation()) > FMath::Square(SprayRange * 2.f))
+	// MP-8: never trust client dt — one RPC with dt=1000 must not clean a section.
+	const float Dt = ClampSprayDt(DeltaSeconds, SprayRequestInterval);
+	if (Dt <= 0.f)
+	{
+		return;
+	}
+
+	// MP-8: measure from the active spray origin (truck nozzle / camera), not the
+	// owner root — full-extension truck sprays are legitimate.
+	FVector Origin = Owner->GetActorLocation();
+	if (USceneComponent* OriginComp = SprayOrigin.Get())
+	{
+		Origin = OriginComp->GetComponentLocation();
+	}
+	else if (const AHoldoverCharacter* Character = Cast<AHoldoverCharacter>(Owner))
+	{
+		if (Character->GetFirstPersonCameraComponent())
+		{
+			Origin = Character->GetFirstPersonCameraComponent()->GetComponentLocation();
+		}
+	}
+
+	if (FVector::DistSquared(Origin, Target->GetActorLocation()) > FMath::Square(SprayRange * 2.f))
 	{
 		UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (out of range): %s -> %s"), *Owner->GetName(), *Target->GetName());
 		return;
 	}
 
-	ApplySpray(Target, DeltaSeconds);
+	ApplySpray(Target, Dt);
 }
 
 void UHoldoverSprayComponent::ServerSetFluid_Implementation(EHoldoverFluidType NewFluid)

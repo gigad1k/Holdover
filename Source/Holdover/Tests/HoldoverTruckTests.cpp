@@ -17,6 +17,11 @@ bool FHoldoverBoomControlsTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Clamp below min"), AHoldoverDeicingTruck::ClampExtension(10.f, 150.f, 900.f), 150.f, KINDA_SMALL_NUMBER);
 	TestEqual(TEXT("Clamp above max"), AHoldoverDeicingTruck::ClampExtension(5000.f, 150.f, 900.f), 900.f, KINDA_SMALL_NUMBER);
 
+	// MP-7: yaw clamp.
+	TestEqual(TEXT("Yaw clamp within range"), AHoldoverDeicingTruck::ClampBoomYaw(45.f, 120.f), 45.f, KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("Yaw clamp above max"), AHoldoverDeicingTruck::ClampBoomYaw(400.f, 120.f), 120.f, KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("Yaw clamp below min"), AHoldoverDeicingTruck::ClampBoomYaw(-400.f, 120.f), -120.f, KINDA_SMALL_NUMBER);
+
 	// SetBoom applies and clamps.
 	AHoldoverDeicingTruck* Truck = NewObject<AHoldoverDeicingTruck>(GetTransientPackage());
 	Truck->SetBoom(45.f, 10000.f);
@@ -25,6 +30,9 @@ bool FHoldoverBoomControlsTest::RunTest(const FString& Parameters)
 
 	Truck->SetBoom(-30.f, 0.f);
 	TestEqual(TEXT("Extension clamped to min"), Truck->BoomExtension, Truck->MinExtension, KINDA_SMALL_NUMBER);
+
+	Truck->SetBoom(400.f, 500.f);
+	TestEqual(TEXT("SetBoom clamps yaw to MaxAbsYaw"), Truck->BoomYaw, Truck->MaxAbsYaw, KINDA_SMALL_NUMBER);
 
 	// Fresh truck is not occupied.
 	TestFalse(TEXT("Not occupied initially"), Truck->IsOccupied());

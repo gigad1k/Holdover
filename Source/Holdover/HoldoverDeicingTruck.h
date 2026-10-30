@@ -43,6 +43,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Boom")
 	float MaxExtension = 900.f;
 
+	/** MP-7: boom yaw is clamped to +/- MaxAbsYaw. */
+	UPROPERTY(EditDefaultsOnly, Category = "Boom")
+	float MaxAbsYaw = 120.f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Boom")
 	float YawSpeed = 60.f;
 
@@ -55,6 +59,7 @@ public:
 
 	/** Clamped, pure boom math (testable). */
 	static float ClampExtension(float Extension, float MinValue, float MaxValue);
+	static float ClampBoomYaw(float Yaw, float MaxAbsYawValue);
 
 	UFUNCTION(BlueprintCallable, Category = "Boom")
 	void SetBoom(float InYaw, float InExtension);
@@ -69,6 +74,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Occupancy")
 	bool IsOccupied() const { return OccupantCharacter != nullptr; }
 
+	AActor* GetOccupant() const { return OccupantCharacter.Get(); }
+
+	/** MP-3: restore the hidden occupant and clear occupancy. Idempotent; does not
+	 *  possess (exit owns re-possession). Called from Logout/unpossess/EndPlay paths. */
+	void EvictOccupant();
+
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
 	virtual void UnPossessed() override;
@@ -78,7 +89,18 @@ public:
 protected:
 	// Owner-safe spray cleanup on every possession-lifetime edge (P7-2).
 	void StopSprayLocal();
-	UFUNCTION(Server, Reliable)
+
+	/** MP-9: mapping-context removal on possession end. */
+	void RemoveTruckInputContext();
+
+	UPROPERTY(Transient)
+	class UInputMappingContext* TruckContext;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<class UEnhancedInputLocalPlayerSubsystem> CachedInputSubsystem;
+	// MP-7: unreliable + rate-validated on the server (a reliable RPC per held key
+	// frame risks reliable-buffer overflow disconnects).
+	UFUNCTION(Server, Unreliable)
 	void ServerSetBoom(float InYaw, float InExtension);
 
 	UFUNCTION(Server, Reliable)
@@ -131,6 +153,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	UFloatingPawnMovement* Movement;
 
-	UPROPERTY(Transient)
+	/** MP-6: replicated so every client sees occupancy (prompts) and can sync state. */
+	UPROPERTY(Replicated)
 	TWeakObjectPtr<AActor> OccupantCharacter;
 };

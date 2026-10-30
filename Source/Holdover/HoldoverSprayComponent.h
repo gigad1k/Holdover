@@ -52,6 +52,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Spray")
 	float SprayRequestInterval = 0.1f;
 
+	/** MP-8: pure dt clamp (world-free, testable) — rejects <=0, caps at 2x interval. */
+	static float ClampSprayDt(float RequestedDt, float Interval);
+
 	// --- state ---
 	UPROPERTY(ReplicatedUsing = OnRep_Fluid, BlueprintReadOnly, Category = "Spray")
 	float TypeIFluid = 100.f;
