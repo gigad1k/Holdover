@@ -23,6 +23,13 @@ public:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	/**
+	 * Builds the widget tree if it is missing. Initialize() only fires
+	 * NativeOnInitialized when PlayerContext is valid, so the parent calls
+	 * this directly after Initialize() as a gate-independent guarantee.
+	 */
+	void EnsureTreeBuilt();
+
 protected:
 	void BuildTree();
 	void RefreshLines();

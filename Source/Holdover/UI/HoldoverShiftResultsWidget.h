@@ -22,6 +22,9 @@ public:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	/** See UHoldoverDispatcherFeedWidget::EnsureTreeBuilt — gate-independent tree build. */
+	void EnsureTreeBuilt();
+
 	/**
 	 * Visibility is parent-driven (P7-1: a Collapsed UserWidget stops
 	 * receiving NativeTick, so a self-showing results screen never shows).

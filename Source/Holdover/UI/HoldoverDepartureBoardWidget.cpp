@@ -12,7 +12,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "EngineUtils.h"
 #include "HoldoverAircraft.h"
-#include "HoldoverUIStyle.h"
+#include "UI/HoldoverUIStyle.h"
 
 namespace
 {
@@ -36,7 +36,11 @@ namespace
 void UHoldoverDepartureBoardWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	EnsureTreeBuilt();
+}
 
+void UHoldoverDepartureBoardWidget::EnsureTreeBuilt()
+{
 	if (!WidgetTree)
 	{
 		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));

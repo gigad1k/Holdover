@@ -22,7 +22,7 @@
 #include "HoldoverHUD.h"
 #include "HoldoverSprayComponent.h"
 #include "HoldoverSurfaceSection.h"
-#include "HoldoverUIStyle.h"
+#include "UI/HoldoverUIStyle.h"
 
 namespace
 {
@@ -66,7 +66,11 @@ namespace
 void UHoldoverHUDWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	EnsureTreeBuilt();
+}
 
+void UHoldoverHUDWidget::EnsureTreeBuilt()
+{
 	if (!WidgetTree)
 	{
 		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
@@ -88,38 +92,47 @@ void UHoldoverHUDWidget::BuildTree()
 	BuildRampConsole(Root);
 	BuildClockPanel(Root);
 
-	// Radio feed, mid-left.
-	FeedWidget = WidgetTree->ConstructWidget<UHoldoverDispatcherFeedWidget>(UHoldoverDispatcherFeedWidget::StaticClass());
-	if (FeedWidget)
+	// Radio feed, mid-left. ConstructWidget children skip CreateWidget, so
+	// Initialize() is what fires their NativeOnInitialized — but Initialize
+	// skips that when PlayerContext isn't valid yet, so EnsureTreeBuilt()
+	// guarantees the tree either way (verified against the UE source).
+	UHoldoverDispatcherFeedWidget* Feed = WidgetTree->ConstructWidget<UHoldoverDispatcherFeedWidget>(UHoldoverDispatcherFeedWidget::StaticClass());
+	if (Feed)
 	{
-		FeedWidget->Initialize(); // ConstructWidget children skip CreateWidget; init builds their trees now.
+		Feed->Initialize();
+		Feed->EnsureTreeBuilt();
 	}
-	UCanvasPanelSlot* FeedSlot = Root->AddChildToCanvas(FeedWidget);
+	FeedWidget = Feed;
+	UCanvasPanelSlot* FeedSlot = Root->AddChildToCanvas(Feed);
 	FeedSlot->SetAnchors(FAnchors(0.f, 0.5f));
 	FeedSlot->SetAlignment(FVector2D(0.f, 0.5f));
 	FeedSlot->SetPosition(FVector2D(24.f, 0.f));
 	FeedSlot->SetAutoSize(true);
 
 	// Fullscreen departure board (Tab), hidden by default.
-	BoardWidget = WidgetTree->ConstructWidget<UHoldoverDepartureBoardWidget>(UHoldoverDepartureBoardWidget::StaticClass());
-	if (BoardWidget)
+	UHoldoverDepartureBoardWidget* Board = WidgetTree->ConstructWidget<UHoldoverDepartureBoardWidget>(UHoldoverDepartureBoardWidget::StaticClass());
+	if (Board)
 	{
-		BoardWidget->Initialize();
+		Board->Initialize();
+		Board->EnsureTreeBuilt();
 	}
-	UCanvasPanelSlot* BoardSlot = Root->AddChildToCanvas(BoardWidget);
+	BoardWidget = Board;
+	UCanvasPanelSlot* BoardSlot = Root->AddChildToCanvas(Board);
 	BoardSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
 	BoardSlot->SetAlignment(FVector2D(0.f, 0.f));
 	BoardSlot->SetPosition(FVector2D(0.f, 0.f));
 	BoardSlot->SetAutoSize(false);
-	BoardWidget->SetVisibility(ESlateVisibility::Collapsed);
+	Board->SetVisibility(ESlateVisibility::Collapsed);
 
-	// Shift report (self-manages visibility from the shift state).
-	ResultsWidget = WidgetTree->ConstructWidget<UHoldoverShiftResultsWidget>(UHoldoverShiftResultsWidget::StaticClass());
-	if (ResultsWidget)
+	// Shift report (visibility parent-driven from NativeTick, see P7-1).
+	UHoldoverShiftResultsWidget* Results = WidgetTree->ConstructWidget<UHoldoverShiftResultsWidget>(UHoldoverShiftResultsWidget::StaticClass());
+	if (Results)
 	{
-		ResultsWidget->Initialize();
+		Results->Initialize();
+		Results->EnsureTreeBuilt();
 	}
-	UCanvasPanelSlot* ResultsSlot = Root->AddChildToCanvas(ResultsWidget);
+	ResultsWidget = Results;
+	UCanvasPanelSlot* ResultsSlot = Root->AddChildToCanvas(Results);
 	ResultsSlot->SetAnchors(FAnchors(0.f, 0.f, 1.f, 1.f));
 	ResultsSlot->SetAlignment(FVector2D(0.f, 0.f));
 	ResultsSlot->SetPosition(FVector2D(0.f, 0.f));

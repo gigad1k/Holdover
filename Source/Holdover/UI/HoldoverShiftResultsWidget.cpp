@@ -11,12 +11,16 @@
 #include "Components/VerticalBoxSlot.h"
 #include "Blueprint/WidgetTree.h"
 #include "HoldoverGameState.h"
-#include "HoldoverUIStyle.h"
+#include "UI/HoldoverUIStyle.h"
 
 void UHoldoverShiftResultsWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	EnsureTreeBuilt();
+}
 
+void UHoldoverShiftResultsWidget::EnsureTreeBuilt()
+{
 	if (!WidgetTree)
 	{
 		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
@@ -69,12 +73,12 @@ void UHoldoverShiftResultsWidget::BuildTree()
 		RowSlot->SetPadding(FMargin(0.f, 4.f));
 
 		UTextBlock* Key = MakeText(WidgetTree, Label, 13, TextDim());
-		UHorizontalBoxSlot* KeySlot = Row->AddChildToHorizontalBox(Key);
-		KeySlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
+		// Fixed-width key column (structural alignment — no SetJustification,
+		// which has no confirmed UFUNCTION on UTextBlock).
+		UHorizontalBoxSlot* KeySlot = Row->AddChildToHorizontalBox(MakeFixed(WidgetTree, 170.f, 18.f, Key));
 		KeySlot->SetVerticalAlignment(VAlign_Center);
 
 		OutValue = MakeText(WidgetTree, TEXT("-"), 14, ValueColor, true);
-		OutValue->SetJustification(ETextJustify::Right);
 		UHorizontalBoxSlot* ValueSlot = Row->AddChildToHorizontalBox(OutValue);
 		ValueSlot->SetSize(FSlateChildSize(ESlateSizeRule::Fill));
 		ValueSlot->SetVerticalAlignment(VAlign_Center);

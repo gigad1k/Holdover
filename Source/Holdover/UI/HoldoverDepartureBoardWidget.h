@@ -24,6 +24,9 @@ public:
 	virtual void NativeOnInitialized() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
+	/** See UHoldoverDispatcherFeedWidget::EnsureTreeBuilt — gate-independent tree build. */
+	void EnsureTreeBuilt();
+
 protected:
 	struct FDepartureRow
 	{

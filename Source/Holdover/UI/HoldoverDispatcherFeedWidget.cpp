@@ -4,13 +4,17 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "HoldoverGameState.h"
-#include "HoldoverUIStyle.h"
+#include "UI/HoldoverUIStyle.h"
 #include "Blueprint/WidgetTree.h"
 
 void UHoldoverDispatcherFeedWidget::NativeOnInitialized()
 {
 	Super::NativeOnInitialized();
+	EnsureTreeBuilt();
+}
 
+void UHoldoverDispatcherFeedWidget::EnsureTreeBuilt()
+{
 	if (!WidgetTree)
 	{
 		WidgetTree = NewObject<UWidgetTree>(this, TEXT("WidgetTree"));
