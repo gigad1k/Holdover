@@ -49,6 +49,10 @@ protected:
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
 
+	/** MP-3: a level-placed truck must survive disconnect cleanup — this is the
+	 *  hook where connection cleanup destroys the connection's pawn. */
+	virtual void PawnLeavingGame() override;
+
 	/** Input mapping context setup */
 	virtual void SetupInputComponent() override;
 

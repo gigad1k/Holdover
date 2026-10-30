@@ -61,6 +61,48 @@ protected:
 
 	virtual void BeginPlay() override;
 
+public:
+	// --- replicated speed state (MP-2) ---
+
+	/** Server-side ice slow toggled by hazard volumes (Multiplier = hazard tuning value). */
+	void SetIceSlowed(bool bSlowed, float Multiplier);
+
+	/** MP-6: vehicle occupancy hides the body and disables collision. Replicated so
+	 *  every client applies the same capsule state (collision itself does not replicate). */
+	void SetVehicleHidden(bool bHiddenInVehicle);
+
+	/** Pure speed-scale formula (world-free, testable). Sprint and ice multiply — they can
+	 *  never stack with raw MaxWalkSpeed writes into a permanent speed change. */
+	static float ComputeSpeedScale(bool bSprinting, float SprintScale, float IceScale);
+
+protected:
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	UFUNCTION()
+	void OnRep_SpeedScale();
+
+	UFUNCTION()
+	void OnRep_VehicleHidden();
+
+	UFUNCTION(Server, Reliable)
+	void ServerSetSprint(bool bEnabled);
+
+	void SetSprintLocal(bool bEnabled);
+	void RecomputeSpeedScale();
+	void ApplySpeedScale();
+	void ApplyVehicleHidden();
+
+	/** Authoritative movement multiplier; MaxWalkSpeed = BaseWalkSpeed * SpeedScale (MP-2). */
+	UPROPERTY(ReplicatedUsing = OnRep_SpeedScale)
+	float SpeedScale = 1.f;
+
+	UPROPERTY(ReplicatedUsing = OnRep_VehicleHidden)
+	bool bVehicleHidden = false;
+
+	bool bSprinting = false;
+	float IceScale = 1.f;
+	float BaseWalkSpeed = 0.f;
+
 	/** Called from Input Actions for movement input */
 	void MoveInput(const FInputActionValue& Value);
 
@@ -106,6 +148,15 @@ protected:
 
 	/** UE 5.8 removed BindKey: sprint/interact/spray use runtime-created actions + mapping context. */
 	void EnsureExtraInputBindings(UInputComponent* InputComponent);
+
+	/** MP-9: explicit mapping-context removal on possession end (contexts must not
+	 *  accumulate across enter/exit cycles). */
+	void RemoveHoldoverInputContext();
+	virtual void UnPossessed() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<class UEnhancedInputLocalPlayerSubsystem> CachedInputSubsystem;
 
 	UPROPERTY(Transient)
 	UInputAction* SprintAction;
