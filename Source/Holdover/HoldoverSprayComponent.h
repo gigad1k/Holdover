@@ -52,6 +52,9 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Spray")
 	float SprayRequestInterval = 0.1f;
 
+	/** MP-8: pure dt clamp (world-free, testable) — rejects <=0, caps at 2x interval. */
+	static float ClampSprayDt(float RequestedDt, float Interval);
+
 	// --- state ---
 	UPROPERTY(ReplicatedUsing = OnRep_Fluid, BlueprintReadOnly, Category = "Spray")
 	float TypeIFluid = 100.f;
@@ -59,7 +62,7 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_Fluid, BlueprintReadOnly, Category = "Spray")
 	float TypeIVFluid = 100.f;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Spray")
+	UPROPERTY(ReplicatedUsing = OnRep_Fluid, BlueprintReadOnly, Category = "Spray")
 	EHoldoverFluidType ActiveFluidType = EHoldoverFluidType::TypeI;
 
 	/** Cosmetic client-side target for HUD feedback. */
@@ -106,6 +109,9 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerSpray(AHoldoverSurfaceSection* Target, float DeltaSeconds);
 
+	UFUNCTION(Server, Reliable)
+	void ServerSetFluid(EHoldoverFluidType NewFluid);
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	void UpdateTargetFromTrace();
@@ -115,4 +121,7 @@ protected:
 
 	bool bSpraying = false;
 	float RequestAccumulator = 0.f;
+
+	UPROPERTY(Transient)
+	class UAudioComponent* HissComponent = nullptr;
 };

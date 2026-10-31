@@ -2,9 +2,11 @@
 
 #include "HoldoverSprayComponent.h"
 #include "Camera/CameraComponent.h"
+#include "Components/AudioComponent.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "Holdover.h"
+#include "HoldoverAudioLibrary.h"
 #include "HoldoverCharacter.h"
 #include "HoldoverSurfaceSection.h"
 #include "Net/UnrealNetwork.h"
@@ -19,6 +21,24 @@ void UHoldoverSprayComponent::SetSpraying(bool bEnabled)
 {
 	bSpraying = bEnabled;
 	RequestAccumulator = 0.f;
+
+	// Cosmetic spray hiss on the owning client only. The stop is unconditional so
+	// server-side stops are harmless no-ops and owner-side stops always land.
+	if (bEnabled)
+	{
+		const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+		if (OwnerPawn && OwnerPawn->IsLocallyControlled() && !HissComponent)
+		{
+			HissComponent = UHoldoverAudioLibrary::Play2D(GetOwner(), FName("spray_hiss"), 0.9f, true);
+			UE_LOG(LogHoldover, Display, TEXT("spray hiss start (%s)"), *GetNameSafe(GetOwner()));
+		}
+	}
+	else if (HissComponent)
+	{
+		HissComponent->Stop();
+		HissComponent = nullptr;
+		UE_LOG(LogHoldover, Display, TEXT("spray hiss stop (%s)"), *GetNameSafe(GetOwner()));
+	}
 }
 
 void UHoldoverSprayComponent::ToggleActiveFluid()
@@ -26,6 +46,10 @@ void UHoldoverSprayComponent::ToggleActiveFluid()
 	ActiveFluidType = (ActiveFluidType == EHoldoverFluidType::TypeI)
 		? EHoldoverFluidType::TypeIV
 		: EHoldoverFluidType::TypeI;
+
+	// Owner applies the flip optimistically for HUD responsiveness; the server
+	// value (from this RPC) is authoritative and replicates back.
+	ServerSetFluid(ActiveFluidType);
 }
 
 void UHoldoverSprayComponent::RefillTanks()
@@ -152,22 +176,57 @@ void UHoldoverSprayComponent::UpdateTargetFromTrace()
 	}
 }
 
+float UHoldoverSprayComponent::ClampSprayDt(float RequestedDt, float Interval)
+{
+	if (RequestedDt <= 0.f || Interval <= 0.f)
+	{
+		return 0.f;
+	}
+	return FMath::Min(RequestedDt, Interval * 2.f);
+}
+
 void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection* Target, float DeltaSeconds)
 {
 	AActor* Owner = GetOwner();
-	if (!Owner || !IsValid(Target) || DeltaSeconds <= 0.f)
+	if (!Owner || !IsValid(Target))
 	{
 		return;
 	}
 
-	// Server-side range validation
-	if (FVector::DistSquared(Owner->GetActorLocation(), Target->GetActorLocation()) > FMath::Square(SprayRange * 2.f))
+	// MP-8: never trust client dt — one RPC with dt=1000 must not clean a section.
+	const float Dt = ClampSprayDt(DeltaSeconds, SprayRequestInterval);
+	if (Dt <= 0.f)
+	{
+		return;
+	}
+
+	// MP-8: measure from the active spray origin (truck nozzle / camera), not the
+	// owner root — full-extension truck sprays are legitimate.
+	FVector Origin = Owner->GetActorLocation();
+	if (USceneComponent* OriginComp = SprayOrigin.Get())
+	{
+		Origin = OriginComp->GetComponentLocation();
+	}
+	else if (const AHoldoverCharacter* Character = Cast<AHoldoverCharacter>(Owner))
+	{
+		if (Character->GetFirstPersonCameraComponent())
+		{
+			Origin = Character->GetFirstPersonCameraComponent()->GetComponentLocation();
+		}
+	}
+
+	if (FVector::DistSquared(Origin, Target->GetActorLocation()) > FMath::Square(SprayRange * 2.f))
 	{
 		UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (out of range): %s -> %s"), *Owner->GetName(), *Target->GetName());
 		return;
 	}
 
-	ApplySpray(Target, DeltaSeconds);
+	ApplySpray(Target, Dt);
+}
+
+void UHoldoverSprayComponent::ServerSetFluid_Implementation(EHoldoverFluidType NewFluid)
+{
+	ActiveFluidType = NewFluid;
 }
 
 void UHoldoverSprayComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
@@ -175,6 +234,7 @@ void UHoldoverSprayComponent::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(UHoldoverSprayComponent, TypeIFluid);
 	DOREPLIFETIME(UHoldoverSprayComponent, TypeIVFluid);
+	DOREPLIFETIME(UHoldoverSprayComponent, ActiveFluidType);
 }
 
 void UHoldoverSprayComponent::OnRep_Fluid()

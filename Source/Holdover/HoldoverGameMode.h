@@ -20,6 +20,9 @@ public:
 protected:
 	virtual void BeginPlay() override;
 
+	/** MP-3: evict truck occupants before controller cleanup destroys connection pawns. */
+	virtual void Logout(AController* Exiting) override;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Shift")
 	float ShiftDuration = 120.f;
 

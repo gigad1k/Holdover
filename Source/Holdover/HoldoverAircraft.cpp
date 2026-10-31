@@ -12,7 +12,8 @@ AHoldoverAircraft::AHoldoverAircraft()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	bReplicates = true;
-	SetReplicatingMovement(false);
+	// MP-5: clients must see the departure climb-out and shift-reset jumps.
+	SetReplicatingMovement(true);
 
 	// Scene root so the actor can hold a transform (required for spawn placement).
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));

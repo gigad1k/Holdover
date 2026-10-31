@@ -4,21 +4,30 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "HoldoverInteractableInterface.h"
 #include "HoldoverSurfaceSection.generated.h"
 
 class UStaticMeshComponent;
+class AHoldoverAircraft;
 
 /**
  * One independently trackable aircraft surface panel.
  * Treatment state is server-authoritative and replicated.
  */
 UCLASS()
-class HOLDOVER_API AHoldoverSurfaceSection : public AActor
+class HOLDOVER_API AHoldoverSurfaceSection : public AActor, public IHoldoverInteractableInterface
 {
 	GENERATED_BODY()
 
 public:
 	AHoldoverSurfaceSection();
+
+	// The aircraft has no traceable collision, so sections forward the departure
+	// interact to their nearest aircraft (MP-5 end-to-end path).
+	virtual FText GetInteractionPrompt_Implementation() const override;
+	virtual void Interact_Implementation(AActor* Interactor) override;
+
+	AHoldoverAircraft* FindOwningAircraft() const;
 
 	/** e.g. "Nose", "LeftWing" — labels are the source of truth in greybox. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Treatment")

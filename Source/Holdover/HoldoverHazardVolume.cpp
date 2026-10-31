@@ -5,6 +5,8 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Holdover.h"
+#include "HoldoverAudioLibrary.h"
+#include "HoldoverCharacter.h"
 #include "HoldoverGameState.h"
 
 AHoldoverHazardVolume::AHoldoverHazardVolume()
@@ -22,16 +24,28 @@ void AHoldoverHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, 
 	UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& SweepResult)
 {
 	ACharacter* Character = Cast<ACharacter>(OtherActor);
-	if (!Character || !HasAuthority())
+	if (!Character)
+	{
+		return;
+	}
+
+	// Local-only collision cue for the player who hit the hazard.
+	if (Character->IsLocallyControlled())
+	{
+		UHoldoverAudioLibrary::Play2D(this, FName("collision_cue"), 0.9f);
+	}
+
+	if (!HasAuthority())
 	{
 		return;
 	}
 
 	if (HazardType == EHoldoverHazardType::Ice)
 	{
-		if (UCharacterMovementComponent* Move = Character->GetCharacterMovement())
+		// MP-2: speed changes go through the character's replicated speed state.
+		if (AHoldoverCharacter* HC = Cast<AHoldoverCharacter>(Character))
 		{
-			Move->MaxWalkSpeed *= IceSpeedMultiplier;
+			HC->SetIceSlowed(true, IceSpeedMultiplier);
 		}
 		if (AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>())
 		{
@@ -59,8 +73,8 @@ void AHoldoverHazardVolume::OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AA
 		return;
 	}
 
-	if (UCharacterMovementComponent* Move = Character->GetCharacterMovement())
+	if (AHoldoverCharacter* HC = Cast<AHoldoverCharacter>(Character))
 	{
-		Move->MaxWalkSpeed /= IceSpeedMultiplier;
+		HC->SetIceSlowed(false, IceSpeedMultiplier);
 	}
 }

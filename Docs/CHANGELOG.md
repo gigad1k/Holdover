@@ -1,5 +1,48 @@
 # CHANGELOG
 
+## 2026-10-29 — Phase 7: UMG HUD + dispatcher feed + placeholder audio
+- UMG HUD: `AHoldoverHUD` keeps the canvas centre reticle + interaction prompt and creates
+  `UHoldoverHUDWidget` on BeginPlay; the widget builds its tree in C++ (`RebuildWidget`) and reads
+  live game state every tick — shift line (SHIFT n/quota, time, pay, deductions), treatment line
+  (active fluid, Type I/Type IV tank %, weather %, current target section clean/prot, fluid-rule
+  hint), `UHoldoverDepartureBoardWidget` (aircraft holdover state + countdown + overall
+  clean/protection), `UHoldoverDispatcherFeedWidget` (last 5 dispatch lines),
+  `UHoldoverShiftResultsWidget` (SHIFT PASSED!/RESTRUCTURED + breakdown, visible only when the
+  shift ended).
+- Treatment line is pawn-agnostic (works from the truck too).
+- `UHoldoverAudioLibrary` (LoadSound/Play2D) loads `/Game/Holdover/Audio/<Name>` and logs a LOUD
+  'PLACEHOLDER AUDIO MISSING' warning instead of failing silently.
+  `Tools/build_placeholder_audio.py` generates 4 deterministic stdlib WAVs and imports them as
+  USoundWave assets: radio_beep, spray_hiss (loop), wind_loop (loop), collision_cue; loop flags
+  set on the two loops (looping comes from `USoundWave::bLooping` — `SpawnSound2D` has no loop
+  parameter).
+- Audio wiring: wind_loop on character BeginPlay (locally controlled), radio_beep on server
+  `AddDispatch` + client `OnRep_Dispatch`, spray_hiss while spraying (owning client), collision_cue
+  when the local player enters a hazard volume.
+- Fixed: `HoldoverPanelWidgets.h` was missing `RebuildWidget` declarations (compile error) — added;
+  `SlateCore` added to `Holdover.Build.cs` (`FCoreStyle` link error).
+- Code-review fixes (`Docs/CODE_REVIEW_2026-10-29.md` P7-1..P7-4): **P7-1** the shift-results
+  banner is parent-driven — a self-`Collapsed` UserWidget stops receiving `NativeTick`, so the
+  banner could never re-show; `UHoldoverHUDWidget::NativeTick` now owns its visibility. **P7-2**
+  the spray-hiss stops on every possession-lifetime edge (`UnPossessed`/`OnRep_Controller`/
+  `EndPlay` + owner-side exit; the `SetSpraying(false)` stop branch is unconditional) and hiss
+  start/stop is logged. **P7-3** the departure board restores the holdover urgency colour ramp
+  (running=green, <30s=yellow, expired=red) as pure `HoldoverStateColor` with an automation
+  test. **P7-4** `build_placeholder_audio.py` `detrend()` algebra fixed (pins both loop
+  endpoints to zero — the old form left the first sample nonzero and clicked at the seam);
+  the generator now asserts the seam.
+- Multiplayer fluid bug fixed in this tree (MP-1): active fluid is server-authoritative
+  (`ServerSetFluid` RPC + replicated `ActiveFluidType`), so remote clients spray what their HUD
+  says. Client-seat verification is Phase 7.5 step 2.
+- Verification (2026-10-29): `HoldoverEditor` Win64 Development build clean; **7/7** automation
+  tests PASS (incl. new `Holdover.UI.BoardStateColor`); placeholder audio regenerated with seam
+  self-check (`spray_hiss`/`wind_loop` endpoints 0.000000), no missing-audio warnings; 2-player
+  listen-server PIE clean (join, shift start dispatch) and the shift-end banner renders red
+  "RESTRUCTURED" at expiry — evidence `Docs/evidence/phase75_p7_results_banner.png` (client
+  window; the host window's banner area is occluded by the editor Message Log in that capture).
+  P7-2 hiss lifecycle and P7-3 colour states in live play still need manual playtest (no input
+  injection automation yet).
+
 ## 2026-10-29 — Phase 6: deicing truck & boom
 - `AHoldoverDeicingTruck`: parked truck with rotating/extending boom + basket nozzle (replicated
   `BoomYaw`/`BoomExtension`, clamped `SetBoom`), enter/exit via interact (server-authoritative
@@ -90,3 +133,43 @@
 ## 2026-10-27 — Repo reset
 - Unity 6 URP template purged (zero game content); UE `.gitignore`/`.gitattributes` (Git LFS) added.
 - `Docs/` seeded with the UE 5.8 MCP build plan and master agent prompt (playbook).
+
+## 2026-10-30 - Phase 7.5 step 2: client-truth pass (MP-1..MP-9)
+
+Every fix verified from the CLIENT seat in PIE as client with net emulation (PktLag=120, PktLoss=5),
+driven by the new `HoldoverEditor` MCP toolset (`Source/HoldoverEditor/` - InjectKey/InjectMouseDelta/
+ExecConsole/TeleportPlayer/GetPawnInfo/ForceTreatment/GetSectionStates/GetTruckState).
+
+- **MP-1 fixed** - active fluid is server-authoritative (`ServerSetFluid` RPC + replicated
+  `ActiveFluidType`). Evidence: client Q-toggled to Type IV and Tail protection rose 0 -> 52
+  (tanks drained 100->40.8/65.6 on the client's own component).
+- **MP-2 fixed** - replicated `SpeedScale` state replaces raw MaxWalkSpeed writes; sprint and ice
+  multiply. Evidence: 600 walk / 1050 sprint / 300 ice / 525 ice+sprint / 600 after the full
+  enter-ice -> sprint -> leave-ice -> release sequence (the old permanent-2x bug is gone).
+  Test `Holdover.Movement.SpeedScale`.
+- **MP-3 fixed** - `AHoldoverPlayerController::PawnLeavingGame` saves a level-placed truck from
+  connection cleanup (evict + unpossess); `GameMode::Logout` evicts as well. Evidence:
+  `PawnLeavingGame: saving truck` -> truck alive `occupied=false` -> host enters
+  (`entered by C_0`) after the client disconnected while inside.
+- **MP-4 fixed** - truck spray origin set on every instance (constructor) so remote occupants'
+  traces come from the nozzle. Evidence: client spray from the truck consumed the truck's tanks
+  and hit sections.
+- **MP-5 fixed** - `SetReplicatingMovement(true)` on the aircraft. Evidence: client observed
+  `holdover=Departed` and `aircraftZ 0 -> 800` (replicated climb-out) after requesting clearance.
+- **MP-6 fixed** - occupancy replicated (`OccupantCharacter`) + replicated `bVehicleHidden`
+  collision state. Evidence: both instances report `occupied=true` after entry.
+- **MP-7 fixed** - `ServerSetBoom` Unreliable + yaw clamp + server rate validation +
+  `COND_SkipOwner`. Evidence: boom moved to `-120` (clamped at MaxAbsYaw) on both sides via the
+  RPC path under net emulation, no disconnects.
+- **MP-8 fixed** - `ClampSprayDt` (test `Holdover.Spray.DtClamp`) + origin-aware range check.
+  Evidence: no false range rejections across the treatment runs; the clamp held under the
+  3Hz-throttled secondary PIE world.
+- **MP-9 fixed** - input contexts created/bound once, removed on unpossess (cached subsystem),
+  truck priority 200 vs character 100. Evidence: repeated enter/exit cycles work from the client.
+- Departure interact unblocked: `AHoldoverSurfaceSection` forwards interact to its nearest
+  aircraft (the aircraft has no traceable collision - E-on-a-section is the departure path).
+- **P7-2 evidence closed**: `spray hiss stop` fires on exit-while-spraying from the client seat
+  (`TryExit` -> `ServerExit arrived: occupied=1` -> `exited back to`).
+- Engine findings (documented): `AController::Possess` calls the NEW pawn's `UnPossessed` mid-entry
+  (eviction must not live there); `AActor::Destroy` is non-virtual in 5.8 (use `PawnLeavingGame`).
+- Verification: 9/9 automation tests PASS via `Tools/run_tests.ps1` (headless, PROC-4).

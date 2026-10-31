@@ -13,6 +13,15 @@
 				"AIModule",
 				"UMG"
 			]
+		},
+		{
+			"Name": "HoldoverEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine",
+				"ToolsetRegistry"
+			]
 		}
 	],
 	"Plugins": [
