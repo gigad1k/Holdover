@@ -52,6 +52,33 @@ public:
 	void SetWeatherSeverity(float NewSeverity);
 
 	// --- shift ---
+	/** DES-4: current shift number (1-based). Advances on RestartShift. */
+	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Shift")
+	int32 ShiftNumber = 1;
+
+	/** DES-4: escalating shift profiles. When empty, built-in defaults are used. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shift")
+	TArray<TObjectPtr<UHoldoverShiftData>> ShiftProfiles;
+
+	/** DES-4: running company ledger (cumulative across shifts). */
+	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Ledger")
+	int32 TotalCompanyPay = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Ledger")
+	int32 TotalCompanyDeductions = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Ledger")
+	int32 CompanyLedger = 0;
+
+	/** DES-4: ensure profiles exist (creates built-in defaults if empty). */
+	void EnsureShiftProfiles();
+
+	/** DES-4: get the current shift's tuning (profiles[ShiftNumber-1] or ShiftData). */
+	UHoldoverShiftData* GetCurrentProfile() const;
+
+	/** DES-4: profile display name for the HUD/dispatcher. */
+	FString GetProfileName() const;
+
 	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Shift")
 	EShiftState ShiftState = EShiftState::WaitingToStart;
 

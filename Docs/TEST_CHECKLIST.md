@@ -157,5 +157,10 @@ via the `HoldoverEditor` MCP toolset. See Docs/CHANGELOG.md for the per-issue ev
 - [ ] **Manual**: weather visibly oscillates (squalls and lulls) over a shift; holdover clock
       is the real threat (not degradation); unprotected sections get dirty in snow; late
       departure fires per-aircraft (not just at shift end); net pay shows on HUD.
-- [ ] DES-4 3–5 escalating shift profiles (`AHoldoverShiftData` assets).
+- [x] DES-4 escalating shift profiles: 5 built-in profiles (Night 1 -> Night 5 Blizzard),
+      difficulty escalates. Test: `Holdover.Treatment.ShiftProfiles`. **Not run.**
+- [x] DES-4 running company ledger: cumulative pay/deductions across shifts, shown on HUD.
+      **Not run.**
+- [ ] **Manual**: play 3+ shifts in sequence — confirm difficulty escalates (weather,
+      deadlines, quota), ledger accumulates, profile name shows on HUD.
 - [ ] DES-6 playtest gate: did anyone laugh unprompted; did players talk to coordinate.

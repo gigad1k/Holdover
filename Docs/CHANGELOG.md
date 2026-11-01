@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-10-31 — Phase 7.6: DES-4 escalating shift profiles + running ledger
+- `HoldoverShiftProfiles.h/cpp`: 5 built-in escalating profiles (Night 1 Orientation ->
+  Night 5 Blizzard). Weather severity, holdover duration, deadlines, contamination and pay
+  all tighten across profiles. `CreateDefaultProfiles()` returns them; designers can override
+  with `UHoldoverShiftData` assets.
+- `AHoldoverGameState`: `ShiftNumber` (1-based, advances on restart), `ShiftProfiles` array,
+  `GetCurrentProfile()` reads tuning from the active profile. `CompanyLedger` /
+  `TotalCompanyPay` / `TotalCompanyDeductions` track cumulative results across shifts.
+- HUD shows shift number, profile name and running ledger.
+- Test: `Holdover.Treatment.ShiftProfiles` — 5 profiles escalate in difficulty. Not run.
+
 ## 2026-10-31 — Phase 7.6: SIM-1..SIM-4 + DES-5 data assets
 - **DES-5**: `UHoldoverFluidData` (spray/tank tuning) and `AHoldoverShiftData` (shift/weather/
   holdover/pay tuning) data assets. Spray component and GameState read from the assets with

@@ -5,6 +5,7 @@
 #include "HoldoverDispatcherLines.h"
 #include "HoldoverGameState.h"
 #include "HoldoverPlayerState.h"
+#include "HoldoverShiftProfiles.h"
 #include "HoldoverSprayComponent.h"
 #include "HoldoverSurfaceSection.h"
 #include "Misc/AutomationTest.h"
@@ -300,6 +301,48 @@ bool FHoldoverNetPayTest::RunTest(const FString& Parameters)
 	GS->Money = 50;
 	GS->Deductions = 100;
 	TestEqual(TEXT("Net pay can be negative"), GS->GetNetPay(), -50);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverShiftProfilesTest,
+	"Holdover.Treatment.ShiftProfiles",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverShiftProfilesTest::RunTest(const FString& Parameters)
+{
+	// DES-4: built-in profiles exist and escalate.
+	TArray<UHoldoverShiftData*> Profiles = HoldoverShiftProfiles::CreateDefaultProfiles(GetTransientPackage());
+	TestEqual(TEXT("5 profiles created"), Profiles.Num(), 5);
+
+	if (Profiles.Num() == 5)
+	{
+		// Difficulty escalates: weather severity increases across profiles.
+		TestTrue(TEXT("Profile 2 weather harder than 1"), Profiles[1]->WeatherSeverityMax > Profiles[0]->WeatherSeverityMax);
+		TestTrue(TEXT("Profile 3 weather harder than 2"), Profiles[2]->WeatherSeverityMax > Profiles[1]->WeatherSeverityMax);
+		TestTrue(TEXT("Profile 5 weather hardest"), Profiles[4]->WeatherSeverityMax > Profiles[3]->WeatherSeverityMax);
+
+		// Holdover duration decreases (more pressure).
+		TestTrue(TEXT("Profile 5 holdover shorter"), Profiles[4]->HoldoverDuration < Profiles[0]->HoldoverDuration);
+
+		// Deadlines tighten.
+		TestTrue(TEXT("Profile 5 deadline tighter"), Profiles[4]->PerAircraftDeadlineSeconds < Profiles[0]->PerAircraftDeadlineSeconds);
+	}
+
+	// Profile names are non-empty.
+	for (int32 i = 1; i <= 5; ++i)
+	{
+		TestFalse(FString::Printf(TEXT("Profile %d has a name"), i), HoldoverShiftProfiles::GetProfileName(i).IsEmpty());
+	}
+
+	// Cleanup (NewObject'd objects get GC'd, but be explicit).
+	for (UHoldoverShiftData* P : Profiles)
+	{
+		if (P)
+		{
+			P->MarkAsGarbage();
+		}
+	}
 
 	return true;
 }

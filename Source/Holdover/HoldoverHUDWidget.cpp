@@ -75,8 +75,10 @@ void UHoldoverHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	const AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
 	if (GS && ShiftLine)
 	{
-		ShiftLine->SetText(FText::FromString(FString::Printf(TEXT("SHIFT %d/%d   time %.0fs   pay $%d   deductions $%d   net $%d"),
-			GS->OnTimeDepartures, GS->Quota, GS->ShiftTimeRemaining, GS->Money, GS->Deductions, GS->GetNetPay())));
+		ShiftLine->SetText(FText::FromString(FString::Printf(TEXT("SHIFT %d (%s)  %d/%d   time %.0fs   pay $%d   ded $%d   net $%d   ledger $%d"),
+			GS->ShiftNumber, *GS->GetProfileName(),
+			GS->OnTimeDepartures, GS->Quota, GS->ShiftTimeRemaining,
+			GS->Money, GS->Deductions, GS->GetNetPay(), GS->CompanyLedger)));
 	}
 
 	// The results banner must never hide itself: a Collapsed UserWidget stops

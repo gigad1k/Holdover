@@ -6,6 +6,7 @@
 #include "HoldoverAudioLibrary.h"
 #include "HoldoverPlayerState.h"
 #include "HoldoverShiftData.h"
+#include "HoldoverShiftProfiles.h"
 #include "Net/UnrealNetwork.h"
 
 AHoldoverGameState::AHoldoverGameState()
@@ -13,46 +14,79 @@ AHoldoverGameState::AHoldoverGameState()
 	PrimaryActorTick.bCanEverTick = true;
 }
 
-// --- DES-5: shift tuning accessors ---
+// --- DES-5: shift tuning accessors (current profile with local fallbacks) ---
 
 float AHoldoverGameState::GetHoldoverDuration() const
 {
-	return ShiftData ? ShiftData->HoldoverDuration : 120.f;
+	const UHoldoverShiftData* P = GetCurrentProfile();
+	return P ? P->HoldoverDuration : 120.f;
 }
 
 float AHoldoverGameState::GetWeatherBurnMultiplier() const
 {
-	return ShiftData ? ShiftData->WeatherBurnMultiplier : 2.f;
+	const UHoldoverShiftData* P = GetCurrentProfile();
+	return P ? P->WeatherBurnMultiplier : 2.f;
 }
 
 float AHoldoverGameState::GetProtectionDegradationPerSecond() const
 {
-	return ShiftData ? ShiftData->ProtectionDegradationPerSecond : 2.f;
+	const UHoldoverShiftData* P = GetCurrentProfile();
+	return P ? P->ProtectionDegradationPerSecond : 2.f;
 }
 
 float AHoldoverGameState::GetHoldoverDegradationScale() const
 {
-	return ShiftData ? ShiftData->HoldoverDegradationScale : 0.f;
+	const UHoldoverShiftData* P = GetCurrentProfile();
+	return P ? P->HoldoverDegradationScale : 0.f;
 }
 
 float AHoldoverGameState::GetReContaminationRatePerSecond() const
 {
-	return ShiftData ? ShiftData->ReContaminationRatePerSecond : 3.f;
+	const UHoldoverShiftData* P = GetCurrentProfile();
+	return P ? P->ReContaminationRatePerSecond : 3.f;
 }
 
 float AHoldoverGameState::GetReContaminationProtectionThreshold() const
 {
-	return ShiftData ? ShiftData->ReContaminationProtectionThreshold : 50.f;
+	const UHoldoverShiftData* P = GetCurrentProfile();
+	return P ? P->ReContaminationProtectionThreshold : 50.f;
 }
 
 int32 AHoldoverGameState::GetHoldoverAbortPenalty() const
 {
-	return ShiftData ? ShiftData->HoldoverAbortPenalty : 15;
+	const UHoldoverShiftData* P = GetCurrentProfile();
+	return P ? P->HoldoverAbortPenalty : 15;
 }
 
 float AHoldoverGameState::GetPerAircraftDeadlineSeconds() const
 {
-	return ShiftData ? ShiftData->PerAircraftDeadlineSeconds : 300.f;
+	const UHoldoverShiftData* P = GetCurrentProfile();
+	return P ? P->PerAircraftDeadlineSeconds : 300.f;
+}
+
+// --- DES-4: shift profiles ---
+
+void AHoldoverGameState::EnsureShiftProfiles()
+{
+	if (ShiftProfiles.Num() == 0)
+	{
+		ShiftProfiles = HoldoverShiftProfiles::CreateDefaultProfiles(this);
+	}
+}
+
+UHoldoverShiftData* AHoldoverGameState::GetCurrentProfile() const
+{
+	if (ShiftProfiles.Num() > 0)
+	{
+		const int32 Index = FMath::Clamp(ShiftNumber - 1, 0, ShiftProfiles.Num() - 1);
+		return ShiftProfiles[Index];
+	}
+	return ShiftData;
+}
+
+FString AHoldoverGameState::GetProfileName() const
+{
+	return HoldoverShiftProfiles::GetProfileName(ShiftNumber);
 }
 
 void AHoldoverGameState::SetWeatherSeverity(float NewSeverity)
@@ -65,10 +99,20 @@ void AHoldoverGameState::SetWeatherSeverity(float NewSeverity)
 
 void AHoldoverGameState::StartShift(float DurationSeconds, int32 InQuota)
 {
-	LastShiftDuration = FMath::Max(0.f, DurationSeconds);
+	// DES-4: use the current profile's spec when available.
+	EnsureShiftProfiles();
+	if (UHoldoverShiftData* Profile = GetCurrentProfile())
+	{
+		LastShiftDuration = Profile->ShiftDuration;
+		Quota = Profile->ShiftQuota;
+	}
+	else
+	{
+		LastShiftDuration = FMath::Max(0.f, DurationSeconds);
+		Quota = FMath::Max(1, InQuota);
+	}
 	ShiftState = EShiftState::InProgress;
 	ShiftTimeRemaining = LastShiftDuration;
-	Quota = FMath::Max(1, InQuota);
 	OnTimeDepartures = 0;
 	LateDepartures = 0;
 	Money = 0;
@@ -76,9 +120,10 @@ void AHoldoverGameState::StartShift(float DurationSeconds, int32 InQuota)
 	bShiftPassed = false;
 
 	// SIM-1: randomise weather for this shift (squalls and lulls, not a monotonic ramp).
-	if (ShiftData)
+	const UHoldoverShiftData* Profile = GetCurrentProfile();
+	if (Profile)
 	{
-		WeatherBaseSeverity = FMath::FRandRange(ShiftData->WeatherSeverityMin, ShiftData->WeatherSeverityMax);
+		WeatherBaseSeverity = FMath::FRandRange(Profile->WeatherSeverityMin, Profile->WeatherSeverityMax);
 		WeatherPhase = FMath::FRandRange(0.f, 2.f * PI);
 	}
 	else
@@ -133,6 +178,12 @@ void AHoldoverGameState::EndShift()
 
 void AHoldoverGameState::RestartShift()
 {
+	// DES-4: advance the shift number and update the running ledger.
+	++ShiftNumber;
+	TotalCompanyPay += Money;
+	TotalCompanyDeductions += Deductions;
+	CompanyLedger = TotalCompanyPay - TotalCompanyDeductions;
+
 	DispatchEvent(EDispatchEvent::NewShift);
 	StartShift(LastShiftDuration, Quota);
 
@@ -206,8 +257,9 @@ void AHoldoverGameState::Tick(float DeltaSeconds)
 			// SIM-1: squalls and lulls — oscillate around the shift's base severity
 			// instead of a one-way ramp to max.
 			WeatherTime += DeltaSeconds;
-			const float Period = ShiftData ? ShiftData->WeatherPeriodSeconds : 90.f;
-			const float Amplitude = ShiftData ? ShiftData->WeatherAmplitude : 0.2f;
+			const UHoldoverShiftData* P = GetCurrentProfile();
+			const float Period = P ? P->WeatherPeriodSeconds : 90.f;
+			const float Amplitude = P ? P->WeatherAmplitude : 0.2f;
 			const float Wave = FMath::Sin(2.f * PI * (WeatherTime + WeatherPhase) / FMath::Max(Period, 1.f));
 			WeatherSeverity = FMath::Clamp(WeatherBaseSeverity + Amplitude * Wave, 0.f, 1.f);
 		}
