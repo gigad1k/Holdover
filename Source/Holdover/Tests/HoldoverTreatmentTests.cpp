@@ -80,6 +80,33 @@ bool FHoldoverFluidRulesTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverSectionOwnershipTest,
+	"Holdover.Treatment.SectionOwnership",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverSectionOwnershipTest::RunTest(const FString& Parameters)
+{
+	// SIM-5: explicit ownership beats proximity.
+	AHoldoverAircraft* PlaneA = NewObject<AHoldoverAircraft>(GetTransientPackage());
+	AHoldoverAircraft* PlaneB = NewObject<AHoldoverAircraft>(GetTransientPackage());
+	AHoldoverSurfaceSection* Section = NewObject<AHoldoverSurfaceSection>(GetTransientPackage());
+
+	// Explicit owner wins.
+	Section->OwningAircraft = PlaneB;
+	PlaneA->RegisterSection(Section);
+	// RegisterSection must NOT steal a section that already has an explicit owner.
+	TestTrue(TEXT("Explicit owner preserved"), Section->OwningAircraft.Get() == PlaneB);
+	TestFalse(TEXT("Plane A did not claim it"), PlaneA->GetSections().Contains(Section));
+
+	// An unowned section can be claimed.
+	AHoldoverSurfaceSection* Unowned = NewObject<AHoldoverSurfaceSection>(GetTransientPackage());
+	PlaneA->RegisterSection(Unowned);
+	TestTrue(TEXT("RegisterSection claims unowned"), Unowned->OwningAircraft.Get() == PlaneA);
+	TestTrue(TEXT("Plane A owns it"), PlaneA->GetSections().Contains(Unowned));
+
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverStateMachineTest,
 	"Holdover.Treatment.HoldoverStateMachine",
 	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)

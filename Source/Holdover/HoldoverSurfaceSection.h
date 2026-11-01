@@ -29,6 +29,14 @@ public:
 
 	AHoldoverAircraft* FindOwningAircraft() const;
 
+	/**
+	 * Explicit owner. When set (in-editor or at spawn) this section belongs to
+	 * exactly one aircraft regardless of distance. When null the radius-gather
+	 * fallback in AHoldoverAircraft::BeginPlay may claim it (SIM-5).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Treatment")
+	TObjectPtr<AHoldoverAircraft> OwningAircraft;
+
 	/** e.g. "Nose", "LeftWing" — labels are the source of truth in greybox. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Treatment")
 	FName SectionName;

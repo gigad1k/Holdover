@@ -23,11 +23,12 @@ protected:
 	/** MP-3: evict truck occupants before controller cleanup destroys connection pawns. */
 	virtual void Logout(AController* Exiting) override;
 
+	// --- shift spec (plan's first shift: 2 aircraft, 8 min, quota 2) ---
 	UPROPERTY(EditDefaultsOnly, Category = "Shift")
-	float ShiftDuration = 120.f;
+	float ShiftDuration = 480.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Shift")
-	int32 ShiftQuota = 1;
+	int32 ShiftQuota = 2;
 };
 
 

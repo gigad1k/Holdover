@@ -39,6 +39,17 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Holdover")
 	float SectionGatherRadius = 1500.f;
 
+	/**
+	 * DES-1: seconds after shift start before this aircraft arrives.
+	 * 0 = present at start. Staggered arrivals create competing holdover clocks.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Holdover")
+	float ArrivalDelay = 0.f;
+
+	/** True once the aircraft has arrived (or had no delay). */
+	UPROPERTY(ReplicatedUsing = OnRep_Arrived, BlueprintReadOnly, Category = "Holdover")
+	bool bArrived = true;
+
 	/** Holdover duration at zero weather (seconds). */
 	UPROPERTY(EditAnywhere, Category = "Holdover")
 	float HoldoverDuration = 120.f;
@@ -95,7 +106,7 @@ public:
 	 */
 	void SimulateTreatment(float DeltaSeconds, float WeatherSeverity);
 
-	/** Registers a section (called by sections on BeginPlay). */
+	/** Registers a section and claims ownership (called by sections on BeginPlay or by gather). */
 	void RegisterSection(AHoldoverSurfaceSection* Section);
 
 	virtual void Tick(float DeltaSeconds) override;
@@ -105,6 +116,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_Holdover();
+
+	UFUNCTION()
+	void OnRep_Arrived();
 
 	UPROPERTY(Transient)
 	TArray<AHoldoverSurfaceSection*> Sections;

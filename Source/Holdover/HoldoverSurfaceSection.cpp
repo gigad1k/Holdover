@@ -25,6 +25,11 @@ AHoldoverSurfaceSection::AHoldoverSurfaceSection()
 
 AHoldoverAircraft* AHoldoverSurfaceSection::FindOwningAircraft() const
 {
+	// SIM-5: explicit ownership always wins over proximity.
+	if (OwningAircraft)
+	{
+		return OwningAircraft;
+	}
 	AHoldoverAircraft* Best = nullptr;
 	float BestDistSq = TNumericLimits<float>::Max();
 	for (TActorIterator<AHoldoverAircraft> It(GetWorld()); It; ++It)

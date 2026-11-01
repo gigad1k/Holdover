@@ -70,9 +70,12 @@ bool AHoldoverAircraft::TryDepart()
 void AHoldoverAircraft::ResetForNewShift()
 {
 	bDeparted = false;
+	bArrived = ArrivalDelay <= 0.f;
 	HoldoverState = EHoldoverState::Incomplete;
 	HoldoverRemaining = 0.f;
 	SetActorLocation(SpawnLocation);
+	SetActorHiddenInGame(!bArrived);
+	SetActorEnableCollision(bArrived);
 	for (AHoldoverSurfaceSection* Section : Sections)
 	{
 		if (Section)
@@ -89,17 +92,28 @@ void AHoldoverAircraft::BeginPlay()
 
 	SpawnLocation = GetActorLocation();
 
-	// Gather sections that were not registered explicitly (greybox test setups).
+	// DES-1: staggered arrivals. A delayed aircraft is parked offscreen until it arrives.
+	bArrived = ArrivalDelay <= 0.f;
+	if (!bArrived)
+	{
+		SetActorHiddenInGame(true);
+		SetActorEnableCollision(false);
+	}
+
+	// SIM-5: radius-gather only claims sections with no explicit owner.
 	for (TActorIterator<AHoldoverSurfaceSection> It(GetWorld()); It; ++It)
 	{
 		AHoldoverSurfaceSection* Section = *It;
-		if (Section && FVector::DistSquared(Section->GetActorLocation(), GetActorLocation()) <= FMath::Square(SectionGatherRadius))
+		if (Section
+			&& Section->OwningAircraft == nullptr
+			&& FVector::DistSquared(Section->GetActorLocation(), GetActorLocation()) <= FMath::Square(SectionGatherRadius))
 		{
 			RegisterSection(Section);
 		}
 	}
 
-	UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' registered %d surface sections"), *GetName(), Sections.Num());
+	UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' registered %d surface sections (arrival delay %.1fs)"),
+		*GetName(), Sections.Num(), ArrivalDelay);
 }
 
 void AHoldoverAircraft::Tick(float DeltaSeconds)
@@ -118,6 +132,25 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// DES-1: staggered arrival — the plane appears once the shift clock passes its delay.
+	if (!bArrived)
+	{
+		const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>();
+		const float Elapsed = GS ? (GS->GetShiftDuration() - GS->ShiftTimeRemaining) : 0.f;
+		if (Elapsed >= ArrivalDelay)
+		{
+			bArrived = true;
+			SetActorHiddenInGame(false);
+			SetActorEnableCollision(true);
+			UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' has ARRIVED"), *GetName());
+			if (AHoldoverGameState* GSW = GetWorld()->GetGameState<AHoldoverGameState>())
+			{
+				GSW->AddDispatch(FString::Printf(TEXT("Aircraft %s is on the stand. Get it treated!"), *GetName()));
+			}
+		}
+		return;
+	}
+
 	float Weather = 0.f;
 	if (const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>())
 	{
@@ -128,10 +161,17 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 
 void AHoldoverAircraft::RegisterSection(AHoldoverSurfaceSection* Section)
 {
-	if (Section && !Sections.Contains(Section))
+	if (!Section || Sections.Contains(Section))
 	{
-		Sections.Add(Section);
+		return;
 	}
+	// SIM-5: never steal a section explicitly owned by another aircraft.
+	if (Section->OwningAircraft != nullptr && Section->OwningAircraft != this)
+	{
+		return;
+	}
+	Sections.Add(Section);
+	Section->OwningAircraft = this;
 }
 
 float AHoldoverAircraft::GetOverallCleanliness() const
@@ -280,9 +320,16 @@ void AHoldoverAircraft::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AHoldoverAircraft, HoldoverState);
 	DOREPLIFETIME(AHoldoverAircraft, HoldoverRemaining);
 	DOREPLIFETIME(AHoldoverAircraft, bDeparted);
+	DOREPLIFETIME(AHoldoverAircraft, bArrived);
 }
 
 void AHoldoverAircraft::OnRep_Holdover()
 {
 	// HUD reads the replicated values directly.
+}
+
+void AHoldoverAircraft::OnRep_Arrived()
+{
+	SetActorHiddenInGame(!bArrived);
+	SetActorEnableCollision(bArrived);
 }

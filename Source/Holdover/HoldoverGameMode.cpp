@@ -1,7 +1,9 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "HoldoverGameMode.h"
+#include "EngineUtils.h"
 #include "GameFramework/Controller.h"
+#include "HoldoverAircraft.h"
 #include "HoldoverDeicingTruck.h"
 #include "HoldoverGameState.h"
 #include "HoldoverHUD.h"
@@ -19,6 +21,12 @@ void AHoldoverGameMode::BeginPlay()
 	if (AHoldoverGameState* GS = GetGameState<AHoldoverGameState>())
 	{
 		GS->StartShift(ShiftDuration, ShiftQuota);
+	}
+
+	// DES-1: initialise all level-placed aircraft for the shift.
+	for (TActorIterator<AHoldoverAircraft> It(GetWorld()); It; ++It)
+	{
+		It->ResetForNewShift();
 	}
 }
 

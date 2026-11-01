@@ -78,6 +78,9 @@ public:
 	void TickShift(float DeltaSeconds);
 	void EndShift();
 
+	/** Duration of the current/last shift (for elapsed-time calculations). */
+	float GetShiftDuration() const { return LastShiftDuration; }
+
 	/** Starts a fresh shift with the previous duration/quota (repeatable loop). */
 	void RestartShift();
 

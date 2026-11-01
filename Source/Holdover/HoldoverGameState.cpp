@@ -1,6 +1,8 @@
 // Copyright Epic Games, Inc. All Rights Reserved.
 
 #include "HoldoverGameState.h"
+#include "EngineUtils.h"
+#include "HoldoverAircraft.h"
 #include "HoldoverAudioLibrary.h"
 #include "Net/UnrealNetwork.h"
 
@@ -63,6 +65,12 @@ void AHoldoverGameState::RestartShift()
 {
 	AddDispatch(TEXT("New shift."));
 	StartShift(LastShiftDuration, Quota);
+
+	// DES-1: reset all aircraft for the fresh shift.
+	for (TActorIterator<AHoldoverAircraft> It(GetWorld()); It; ++It)
+	{
+		It->ResetForNewShift();
+	}
 }
 
 void AHoldoverGameState::RegisterDeparture(bool bOnTime)
