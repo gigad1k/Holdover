@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameStateBase.h"
+#include "HoldoverDispatcherLines.h"
 #include "HoldoverGameState.generated.h"
 
 UENUM(BlueprintType)
@@ -85,8 +86,11 @@ public:
 	void RestartShift();
 
 	void RegisterDeparture(bool bOnTime, class AHoldoverPlayerState* ResponsiblePlayer = nullptr);
-	void RegisterPenalty(int32 Amount, const FString& Reason, class AHoldoverPlayerState* ResponsiblePlayer = nullptr);
+	void RegisterPenalty(int32 Amount, const FString& Reason, class AHoldoverPlayerState* ResponsiblePlayer = nullptr, EDispatchEvent Event = EDispatchEvent::JetBlast);
 	void AddDispatch(const FString& Line);
+
+	/** DES-3: fires a reactive dispatcher line from the bank, tracking repetition. */
+	void DispatchEvent(EDispatchEvent Event, const FString& PlayerName = TEXT(""));
 
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -98,4 +102,7 @@ protected:
 	void OnRep_Dispatch();
 
 	float LastShiftDuration = 120.f;
+
+	/** DES-3: per-event repetition counters for the dispatcher line bank. */
+	TMap<EDispatchEvent, int32> EventRepetitionCounts;
 };

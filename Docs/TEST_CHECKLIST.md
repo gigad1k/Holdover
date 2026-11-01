@@ -146,6 +146,13 @@ via the `HoldoverEditor` MCP toolset. See Docs/CHANGELOG.md for the per-issue ev
 - [ ] SIM-2 holdover abort cost / degradation pause.
 - [ ] SIM-3 precipitation re-contaminates unprotected sections.
 - [ ] SIM-4 net pay = money - deductions; penalties can fail a shift.
-- [ ] DES-3 dispatcher line bank (60-100 reactive lines).
+- [x] DES-3 dispatcher line bank: 79 reactive lines across 17 events, keyed by event + repetition
+      + blame. Test: `Holdover.Treatment.DispatcherBank`. **Not run.**
+- [x] DES-3 ice stumble: physical launch on ice entry (not just speed change). **Not run.**
+- [x] DES-3 jet blast cooldown: per-player 5s cooldown on penalties. **Not run.**
+- [ ] **Manual (2-player)**: hear varied dispatcher lines across a full shift (no repeats in
+      first 3-5 of each event); feel the ice stumble; confirm jet blast penalty fires once
+      per entry (not every frame).
+- [ ] DES-3 knockable props (physics props players can bump over). _(deferred)_
 - [ ] DES-4/DES-5 data assets (`AHoldoverShiftData`, `UHoldoverFluidData`).
 - [ ] DES-6 playtest gate: did anyone laugh unprompted; did players talk to coordinate.

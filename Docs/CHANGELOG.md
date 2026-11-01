@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-10-31 — Phase 7.6: DES-3 dispatcher line bank + ice stumble + jet blast cooldown
+- `HoldoverDispatcherLines.h/cpp`: 79 reactive dispatcher lines across 17 events, keyed by
+  event + repetition tier + blamed player. RESTRUCTURED voice (underqualified crew comedy).
+  `HoldoverDispatch::GetLine(Event, Repetition, PlayerName)` is deterministic for tests.
+- `AHoldoverGameState::DispatchEvent(Event, PlayerName)` tracks per-event repetition and fires
+  a bank line. All 10 hardcoded `AddDispatch` call sites replaced with `DispatchEvent`.
+- Ice stumble: entering an ice volume launches the character (small stumble, `IceStumbleStrength`)
+  so the hazard is physical, not just a speed number. Client-predicted launch for instant feedback.
+- Jet blast: per-player cooldown (`JetBlastCooldown`, 5s) so the same player isn't fined
+  repeatedly. Launch always fires; penalty respects the cooldown. Penalty attributed to the
+  player's PlayerState.
+- Test: `Holdover.Treatment.DispatcherBank` — all 17 events return lines, repetition varies
+  output, exhausted tiers cycle safely. Not run — manual build required.
+
 ## 2026-10-31 — Phase 7.6: DES-2 PlayerState + one-tank rule
 - `AHoldoverPlayerState`: per-player earnings/penalties/departures attribution, replicated;
   `CarriedFluidType` (one-tank rule). Credited on departure request and shown on the results

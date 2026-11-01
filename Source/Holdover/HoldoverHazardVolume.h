@@ -16,8 +16,9 @@ enum class EHoldoverHazardType : uint8
 };
 
 /**
- * Greybox hazard volume. Ice reduces traction while overlapped (fair, no lock);
- * Jet Blast pushes the player away and costs a penalty.
+ * Greybox hazard volume. Ice reduces traction while overlapped and trips a
+ * brief stumble; Jet Blast pushes the player away and costs a penalty (with a
+ * per-player cooldown so the same player isn't fined repeatedly).
  */
 UCLASS()
 class HOLDOVER_API AHoldoverHazardVolume : public AActor
@@ -33,11 +34,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Hazard")
 	float IceSpeedMultiplier = 0.5f;
 
+	/** DES-3: brief physical stumble on ice (small launch + slowdown). */
+	UPROPERTY(EditDefaultsOnly, Category = "Hazard")
+	float IceStumbleStrength = 300.f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Hazard")
 	float JetBlastLaunchStrength = 1200.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Hazard")
 	int32 JetBlastPenalty = 25;
+
+	/** DES-3: seconds between jet-blast penalties for the same player. */
+	UPROPERTY(EditDefaultsOnly, Category = "Hazard")
+	float JetBlastCooldown = 5.f;
 
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
@@ -50,4 +59,7 @@ protected:
 	UFUNCTION()
 	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
+
+	/** Per-player last jet-blast penalty time (server-only). */
+	TMap<TWeakObjectPtr<AActor>, float> JetBlastCooldownMap;
 };

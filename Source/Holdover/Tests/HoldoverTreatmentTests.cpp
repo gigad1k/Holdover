@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "HoldoverAircraft.h"
+#include "HoldoverDispatcherLines.h"
 #include "HoldoverPlayerState.h"
 #include "HoldoverSprayComponent.h"
 #include "HoldoverSurfaceSection.h"
@@ -209,6 +210,45 @@ bool FHoldoverOneTankRefillTest::RunTest(const FString& Parameters)
 	// Refill progress is 0 when not refilling.
 	TestFalse(TEXT("Not refilling initially"), Spray->IsRefilling());
 	TestEqual(TEXT("Refill progress zero"), Spray->GetRefillProgress(), 0.f, KINDA_SMALL_NUMBER);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverDispatcherBankTest,
+	"Holdover.Treatment.DispatcherBank",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverDispatcherBankTest::RunTest(const FString& Parameters)
+{
+	// Every event returns a non-empty line.
+	const TArray<EDispatchEvent> Events = {
+		EDispatchEvent::ShiftStart, EDispatchEvent::AircraftArrival,
+		EDispatchEvent::TreatmentComplete, EDispatchEvent::HoldoverStarted,
+		EDispatchEvent::HoldoverWarning, EDispatchEvent::HoldoverExpired,
+		EDispatchEvent::DepartureOnTime, EDispatchEvent::DepartureLate,
+		EDispatchEvent::IceStumble, EDispatchEvent::JetBlast,
+		EDispatchEvent::RefillComplete, EDispatchEvent::TankEmpty,
+		EDispatchEvent::ShiftPassed, EDispatchEvent::ShiftFailed,
+		EDispatchEvent::NewShift, EDispatchEvent::PlayerConnected,
+		EDispatchEvent::PlayerDisconnected
+	};
+	for (EDispatchEvent Event : Events)
+	{
+		const FString Line = HoldoverDispatch::GetLine(Event, 0, TEXT(""));
+		TestFalse(FString::Printf(TEXT("Event %d returns a line"), (int32)Event), Line.IsEmpty());
+	}
+
+	// Repetition changes the line (tier rotation).
+	const FString First = HoldoverDispatch::GetLine(EDispatchEvent::IceStumble, 0, TEXT(""));
+	const FString Second = HoldoverDispatch::GetLine(EDispatchEvent::IceStumble, 1, TEXT(""));
+	TestFalse(TEXT("Repetition changes the line"), First == Second);
+
+	// Exhausted tiers cycle the last tier without crashing.
+	for (int32 i = 0; i < 20; ++i)
+	{
+		const FString Line = HoldoverDispatch::GetLine(EDispatchEvent::JetBlast, i, TEXT(""));
+		TestFalse(FString::Printf(TEXT("Repetition %d returns a line"), i), Line.IsEmpty());
+	}
 
 	return true;
 }

@@ -167,7 +167,7 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 			UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' has ARRIVED"), *GetName());
 			if (AHoldoverGameState* GSW = GetWorld()->GetGameState<AHoldoverGameState>())
 			{
-				GSW->AddDispatch(FString::Printf(TEXT("Aircraft %s is on the stand. Get it treated!"), *GetName()));
+				GSW->DispatchEvent(EDispatchEvent::AircraftArrival);
 			}
 		}
 		return;
@@ -290,7 +290,7 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 		UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover started (%.0fs)"), *GetName(), HoldoverRemaining);
 		if (AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr)
 		{
-			GS->AddDispatch(TEXT("Aircraft treated. Holdover running - clear it for departure!"));
+			GS->DispatchEvent(EDispatchEvent::HoldoverStarted);
 		}
 	}
 
@@ -322,7 +322,7 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 				UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover EXPIRED — retreatment required"), *GetName());
 				if (AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr)
 				{
-					GS->AddDispatch(TEXT("HOLDOVER EXPIRED! Protection is gone - retreat the aircraft."));
+					GS->DispatchEvent(EDispatchEvent::HoldoverExpired);
 				}
 			}
 		}

@@ -44,7 +44,7 @@ void AHoldoverGameState::StartShift(float DurationSeconds, int32 InQuota)
 		}
 	}
 
-	AddDispatch(FString::Printf(TEXT("Shift start. Quota: %d on-time departures."), Quota));
+	DispatchEvent(EDispatchEvent::ShiftStart);
 }
 
 void AHoldoverGameState::TickShift(float DeltaSeconds)
@@ -70,14 +70,12 @@ void AHoldoverGameState::EndShift()
 	}
 	ShiftState = EShiftState::ShiftEnded;
 	bShiftPassed = OnTimeDepartures >= Quota;
-	AddDispatch(bShiftPassed
-		? FString::Printf(TEXT("SHIFT PASSED. %d/%d on-time. Pay $%d, deductions $%d."), OnTimeDepartures, Quota, Money, Deductions)
-		: FString::Printf(TEXT("RESTRUCTURED. %d/%d on-time. Pay $%d, deductions $%d."), OnTimeDepartures, Quota, Money, Deductions));
+	DispatchEvent(bShiftPassed ? EDispatchEvent::ShiftPassed : EDispatchEvent::ShiftFailed);
 }
 
 void AHoldoverGameState::RestartShift()
 {
-	AddDispatch(TEXT("New shift."));
+	DispatchEvent(EDispatchEvent::NewShift);
 	StartShift(LastShiftDuration, Quota);
 
 	// DES-1: reset all aircraft for the fresh shift.
@@ -89,30 +87,31 @@ void AHoldoverGameState::RestartShift()
 
 void AHoldoverGameState::RegisterDeparture(bool bOnTime, AHoldoverPlayerState* ResponsiblePlayer)
 {
-	const FString Who = ResponsiblePlayer ? ResponsiblePlayer->GetShortName() + TEXT(" ") : TEXT("");
+	const FString Who = ResponsiblePlayer ? ResponsiblePlayer->GetShortName() : TEXT("");
 	if (bOnTime)
 	{
 		OnTimeDepartures++;
 		Money += PayPerOnTimeDeparture;
-		AddDispatch(FString::Printf(TEXT("%sdeparture cleared. +$%d."), *Who, PayPerOnTimeDeparture));
+		DispatchEvent(EDispatchEvent::DepartureOnTime, Who);
 	}
 	else
 	{
 		LateDepartures++;
 		Deductions += LateDepartureDeduction;
-		AddDispatch(FString::Printf(TEXT("%sLATE departure. -$%d."), *Who, LateDepartureDeduction));
+		DispatchEvent(EDispatchEvent::DepartureLate, Who);
 	}
 }
 
-void AHoldoverGameState::RegisterPenalty(int32 Amount, const FString& Reason, AHoldoverPlayerState* ResponsiblePlayer)
+void AHoldoverGameState::RegisterPenalty(int32 Amount, const FString& Reason, AHoldoverPlayerState* ResponsiblePlayer, EDispatchEvent Event)
 {
 	if (Amount <= 0)
 	{
 		return;
 	}
 	Deductions += Amount;
-	const FString Who = ResponsiblePlayer ? ResponsiblePlayer->GetShortName() + TEXT(" ") : TEXT("");
-	AddDispatch(FString::Printf(TEXT("%s%s -$%d"), *Who, *Reason, Amount));
+	const FString Who = ResponsiblePlayer ? ResponsiblePlayer->GetShortName() : TEXT("");
+	UE_LOG(LogHoldover, Display, TEXT("Penalty: %s -$%d (%s)"), *Who, Amount, *Reason);
+	DispatchEvent(Event, Who);
 }
 
 void AHoldoverGameState::AddDispatch(const FString& Line)
@@ -128,6 +127,14 @@ void AHoldoverGameState::AddDispatch(const FString& Line)
 	{
 		UHoldoverAudioLibrary::Play2D(this, FName("radio_beep"), 0.6f);
 	}
+}
+
+void AHoldoverGameState::DispatchEvent(EDispatchEvent Event, const FString& PlayerName)
+{
+	int32& Count = EventRepetitionCounts.FindOrAdd(Event);
+	const FString Line = HoldoverDispatch::GetLine(Event, Count, PlayerName);
+	++Count;
+	AddDispatch(Line);
 }
 
 void AHoldoverGameState::Tick(float DeltaSeconds)
