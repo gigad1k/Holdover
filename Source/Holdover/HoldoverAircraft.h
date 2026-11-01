@@ -62,6 +62,18 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Holdover")
 	float ProtectionDegradationPerSecond = 2.f;
 
+	/** SIM-2: degradation scale during active holdover (0 = paused, expiry is the threat). */
+	UPROPERTY(EditAnywhere, Category = "Holdover")
+	float HoldoverDegradationScale = 0.f;
+
+	/** SIM-3: cleanliness % lost per second at weather severity 1 on unprotected sections. */
+	UPROPERTY(EditAnywhere, Category = "Contamination")
+	float ReContaminationRatePerSecond = 0.f;
+
+	/** SIM-3: sections at or above this protection % are immune to re-contamination. */
+	UPROPERTY(EditAnywhere, Category = "Contamination")
+	float ReContaminationProtectionThreshold = 50.f;
+
 	// --- state (server writes; clients read) ---
 	UPROPERTY(ReplicatedUsing = OnRep_Holdover, BlueprintReadOnly, Category = "Holdover")
 	EHoldoverState HoldoverState = EHoldoverState::Incomplete;
@@ -99,6 +111,12 @@ public:
 
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Holdover")
 	bool bDeparted = false;
+
+	/** SIM-4: server-side arrival timestamp for per-aircraft deadline checks. */
+	float ArrivalTime = -1.f;
+
+	/** SIM-4: is this aircraft's departure window already past? */
+	bool IsDepartureLate() const;
 
 	/**
 	 * Deterministic treatment update: degrades protection with weather, manages

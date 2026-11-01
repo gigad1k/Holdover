@@ -5,11 +5,54 @@
 #include "HoldoverAircraft.h"
 #include "HoldoverAudioLibrary.h"
 #include "HoldoverPlayerState.h"
+#include "HoldoverShiftData.h"
 #include "Net/UnrealNetwork.h"
 
 AHoldoverGameState::AHoldoverGameState()
 {
 	PrimaryActorTick.bCanEverTick = true;
+}
+
+// --- DES-5: shift tuning accessors ---
+
+float AHoldoverGameState::GetHoldoverDuration() const
+{
+	return ShiftData ? ShiftData->HoldoverDuration : 120.f;
+}
+
+float AHoldoverGameState::GetWeatherBurnMultiplier() const
+{
+	return ShiftData ? ShiftData->WeatherBurnMultiplier : 2.f;
+}
+
+float AHoldoverGameState::GetProtectionDegradationPerSecond() const
+{
+	return ShiftData ? ShiftData->ProtectionDegradationPerSecond : 2.f;
+}
+
+float AHoldoverGameState::GetHoldoverDegradationScale() const
+{
+	return ShiftData ? ShiftData->HoldoverDegradationScale : 0.f;
+}
+
+float AHoldoverGameState::GetReContaminationRatePerSecond() const
+{
+	return ShiftData ? ShiftData->ReContaminationRatePerSecond : 3.f;
+}
+
+float AHoldoverGameState::GetReContaminationProtectionThreshold() const
+{
+	return ShiftData ? ShiftData->ReContaminationProtectionThreshold : 50.f;
+}
+
+int32 AHoldoverGameState::GetHoldoverAbortPenalty() const
+{
+	return ShiftData ? ShiftData->HoldoverAbortPenalty : 15;
+}
+
+float AHoldoverGameState::GetPerAircraftDeadlineSeconds() const
+{
+	return ShiftData ? ShiftData->PerAircraftDeadlineSeconds : 300.f;
 }
 
 void AHoldoverGameState::SetWeatherSeverity(float NewSeverity)
@@ -31,6 +74,20 @@ void AHoldoverGameState::StartShift(float DurationSeconds, int32 InQuota)
 	Money = 0;
 	Deductions = 0;
 	bShiftPassed = false;
+
+	// SIM-1: randomise weather for this shift (squalls and lulls, not a monotonic ramp).
+	if (ShiftData)
+	{
+		WeatherBaseSeverity = FMath::FRandRange(ShiftData->WeatherSeverityMin, ShiftData->WeatherSeverityMax);
+		WeatherPhase = FMath::FRandRange(0.f, 2.f * PI);
+	}
+	else
+	{
+		WeatherBaseSeverity = FMath::FRandRange(0.1f, 0.5f);
+		WeatherPhase = FMath::FRandRange(0.f, 2.f * PI);
+	}
+	WeatherTime = 0.f;
+	WeatherSeverity = WeatherBaseSeverity;
 
 	// DES-2: reset per-player attribution for the new shift.
 	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
@@ -69,7 +126,8 @@ void AHoldoverGameState::EndShift()
 		return;
 	}
 	ShiftState = EShiftState::ShiftEnded;
-	bShiftPassed = OnTimeDepartures >= Quota;
+	// SIM-4: net pay matters — a shift passes only with enough departures AND positive net pay.
+	bShiftPassed = (OnTimeDepartures >= Quota) && (GetNetPay() > 0);
 	DispatchEvent(bShiftPassed ? EDispatchEvent::ShiftPassed : EDispatchEvent::ShiftFailed);
 }
 
@@ -143,9 +201,15 @@ void AHoldoverGameState::Tick(float DeltaSeconds)
 
 	if (HasAuthority())
 	{
-		if (bAutoRampWeather)
+		if (bAutoRampWeather && ShiftState == EShiftState::InProgress)
 		{
-			WeatherSeverity = FMath::Clamp(WeatherSeverity + WeatherRampPerSecond * DeltaSeconds, 0.f, 1.f);
+			// SIM-1: squalls and lulls — oscillate around the shift's base severity
+			// instead of a one-way ramp to max.
+			WeatherTime += DeltaSeconds;
+			const float Period = ShiftData ? ShiftData->WeatherPeriodSeconds : 90.f;
+			const float Amplitude = ShiftData ? ShiftData->WeatherAmplitude : 0.2f;
+			const float Wave = FMath::Sin(2.f * PI * (WeatherTime + WeatherPhase) / FMath::Max(Period, 1.f));
+			WeatherSeverity = FMath::Clamp(WeatherBaseSeverity + Amplitude * Wave, 0.f, 1.f);
 		}
 		TickShift(DeltaSeconds);
 	}

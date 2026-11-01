@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 2026-10-31 — Phase 7.6: SIM-1..SIM-4 + DES-5 data assets
+- **DES-5**: `UHoldoverFluidData` (spray/tank tuning) and `AHoldoverShiftData` (shift/weather/
+  holdover/pay tuning) data assets. Spray component and GameState read from the assets with
+  local-default fallbacks. Aircraft syncs tuning from GameState each tick.
+- **SIM-1**: Weather reset/randomisation per shift — base severity randomised per shift,
+  squalls/lulls via sine oscillation (`WeatherAmplitude`, `WeatherPeriodSeconds`) instead of a
+  monotonic ramp to max. `WeatherTime`/`WeatherBaseSeverity`/`WeatherPhase` tracked per shift.
+- **SIM-2**: Degradation paused during active holdover (`HoldoverDegradationScale`, default 0)
+  so expiry is the clock players fight. Holdover abort charges a penalty (`HoldoverAbortPenalty`).
+- **SIM-3**: Precipitation re-contaminates unprotected sections
+  (`ReContaminationRatePerSecond` * weather). Sections above `ReContaminationProtectionThreshold`
+  are immune. `ApplyContamination()` on surface sections.
+- **SIM-4**: Net pay = money − deductions; `bShiftPassed` requires both quota met AND positive
+  net pay. Per-aircraft deadlines (`PerAircraftDeadlineSeconds`): late if past deadline even
+  during an active shift. HUD shows net pay.
+- Tests: `Holdover.Treatment.Contamination`, `Holdover.Treatment.NetPay`. Not run.
+
 ## 2026-10-31 — Phase 7.6: DES-3 dispatcher line bank + ice stumble + jet blast cooldown
 - `HoldoverDispatcherLines.h/cpp`: 79 reactive dispatcher lines across 17 events, keyed by
   event + repetition tier + blamed player. RESTRUCTURED voice (underqualified crew comedy).

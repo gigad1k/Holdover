@@ -93,6 +93,17 @@ float AHoldoverSurfaceSection::ApplyDegradation(float Amount)
 	return Before - ProtectionPercent;
 }
 
+float AHoldoverSurfaceSection::ApplyContamination(float Amount)
+{
+	if (Amount <= 0.f)
+	{
+		return 0.f;
+	}
+	const float Before = CleanlinessPercent;
+	CleanlinessPercent = FMath::Clamp(CleanlinessPercent - Amount, 0.f, 100.f);
+	return Before - CleanlinessPercent;
+}
+
 void AHoldoverSurfaceSection::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);

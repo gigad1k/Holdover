@@ -70,6 +70,9 @@ public:
 	/** Server-side: weather-driven protection loss. Returns the amount actually lost. */
 	float ApplyDegradation(float Amount);
 
+	/** SIM-3: server-side cleanliness loss from precipitation. Returns the amount lost. */
+	float ApplyContamination(float Amount);
+
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 protected:

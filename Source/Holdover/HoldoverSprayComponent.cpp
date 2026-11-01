@@ -49,11 +49,12 @@ void UHoldoverSprayComponent::BeginRefill(EHoldoverFluidType NewType)
 
 float UHoldoverSprayComponent::GetRefillProgress() const
 {
-	if (!bRefilling || RefillDuration <= 0.f)
+	const float Duration = GetRefillDuration();
+	if (!bRefilling || Duration <= 0.f)
 	{
 		return bRefilling ? 1.f : 0.f;
 	}
-	return 1.f - (RefillTimeRemaining / RefillDuration);
+	return 1.f - (RefillTimeRemaining / Duration);
 }
 
 bool UHoldoverSprayComponent::ApplySpray(AHoldoverSurfaceSection* Target, float DeltaSeconds)
@@ -69,8 +70,8 @@ bool UHoldoverSprayComponent::ApplySpray(AHoldoverSurfaceSection* Target, float 
 		{
 			return false;
 		}
-		Target->ApplyCleaning(CleanRatePerSecond * DeltaSeconds);
-		FluidLevel = FMath::Max(0.f, FluidLevel - TypeIUsePerSecond * DeltaSeconds);
+		Target->ApplyCleaning(GetCleanRate() * DeltaSeconds);
+		FluidLevel = FMath::Max(0.f, FluidLevel - GetTypeIUseRate() * DeltaSeconds);
 		return true;
 	}
 
@@ -84,8 +85,8 @@ bool UHoldoverSprayComponent::ApplySpray(AHoldoverSurfaceSection* Target, float 
 	{
 		return false;
 	}
-	Target->ApplyProtection(ProtectRatePerSecond * DeltaSeconds);
-	FluidLevel = FMath::Max(0.f, FluidLevel - TypeIVUsePerSecond * DeltaSeconds);
+	Target->ApplyProtection(GetProtectRate() * DeltaSeconds);
+	FluidLevel = FMath::Max(0.f, FluidLevel - GetTypeIVUseRate() * DeltaSeconds);
 	return true;
 }
 
@@ -101,7 +102,7 @@ void UHoldoverSprayComponent::TickComponent(float DeltaTime, ELevelTick TickType
 		{
 			RefillTimeRemaining = 0.f;
 			bRefilling = false;
-			FluidLevel = FluidCapacity;
+			FluidLevel = GetFluidCapacity();
 			UE_LOG(LogHoldover, Display, TEXT("Refill complete (%s) -> %s, %.0f"),
 				*GetNameSafe(GetOwner()),
 				CarriedFluidType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV"),
@@ -167,7 +168,7 @@ void UHoldoverSprayComponent::UpdateTargetFromTrace()
 
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverSpray), false, Owner);
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, Start + Aim.Vector() * SprayRange, ECC_Visibility, Params))
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, Start + Aim.Vector() * GetSprayRange(), ECC_Visibility, Params))
 	{
 		if (AHoldoverSurfaceSection* Section = Cast<AHoldoverSurfaceSection>(Hit.GetActor()))
 		{
@@ -225,7 +226,7 @@ void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection
 		}
 	}
 
-	if (FVector::DistSquared(Origin, Target->GetActorLocation()) > FMath::Square(SprayRange * 2.f))
+	if (FVector::DistSquared(Origin, Target->GetActorLocation()) > FMath::Square(GetSprayRange() * 2.f))
 	{
 		UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (out of range): %s -> %s"), *Owner->GetName(), *Target->GetName());
 		return;
@@ -238,14 +239,15 @@ void UHoldoverSprayComponent::ServerBeginRefill_Implementation(EHoldoverFluidTyp
 {
 	// DES-2: one-tank rule — choosing a fluid at the station replaces whatever
 	// you were carrying. The refill takes RefillDuration seconds.
+	const float Duration = GetRefillDuration();
 	CarriedFluidType = NewType;
 	FluidLevel = 0.f;
 	bRefilling = true;
-	RefillTimeRemaining = RefillDuration;
+	RefillTimeRemaining = Duration;
 	UE_LOG(LogHoldover, Display, TEXT("Refill started (%s) -> %s, %.1fs"),
 		*GetNameSafe(GetOwner()),
 		NewType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV"),
-		RefillDuration);
+		Duration);
 }
 
 void UHoldoverSprayComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

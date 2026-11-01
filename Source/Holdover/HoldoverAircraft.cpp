@@ -45,7 +45,11 @@ void AHoldoverAircraft::Interact_Implementation(AActor* Interactor)
 	}
 
 	AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
-	const bool bOnTime = GS && GS->ShiftState == EShiftState::InProgress && GS->ShiftTimeRemaining > 0.f;
+
+	// SIM-4: per-aircraft deadline — late if past the deadline OR the shift is over.
+	const bool bOnTime = GS
+		&& GS->ShiftState == EShiftState::InProgress
+		&& !IsDepartureLate();
 
 	if (TryDepart())
 	{
@@ -93,6 +97,7 @@ void AHoldoverAircraft::ResetForNewShift()
 {
 	bDeparted = false;
 	bArrived = ArrivalDelay <= 0.f;
+	ArrivalTime = bArrived ? (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f) : -1.f;
 	HoldoverState = EHoldoverState::Incomplete;
 	HoldoverRemaining = 0.f;
 	SetActorLocation(SpawnLocation);
@@ -106,6 +111,17 @@ void AHoldoverAircraft::ResetForNewShift()
 			Section->ProtectionPercent = 0.f;
 		}
 	}
+}
+
+bool AHoldoverAircraft::IsDepartureLate() const
+{
+	if (ArrivalTime < 0.f || !GetWorld())
+	{
+		return false;
+	}
+	const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>();
+	const float Deadline = GS ? GS->GetPerAircraftDeadlineSeconds() : 300.f;
+	return GetWorld()->GetTimeSeconds() > ArrivalTime + Deadline;
 }
 
 void AHoldoverAircraft::BeginPlay()
@@ -164,6 +180,7 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 			bArrived = true;
 			SetActorHiddenInGame(false);
 			SetActorEnableCollision(true);
+			ArrivalTime = GetWorld()->GetTimeSeconds();
 			UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' has ARRIVED"), *GetName());
 			if (AHoldoverGameState* GSW = GetWorld()->GetGameState<AHoldoverGameState>())
 			{
@@ -177,6 +194,14 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 	if (const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>())
 	{
 		Weather = GS->WeatherSeverity;
+
+		// DES-5: sync tuning from the shift data asset (local defaults as fallback).
+		HoldoverDuration = GS->GetHoldoverDuration();
+		WeatherBurnMultiplier = GS->GetWeatherBurnMultiplier();
+		ProtectionDegradationPerSecond = GS->GetProtectionDegradationPerSecond();
+		HoldoverDegradationScale = GS->GetHoldoverDegradationScale();
+		ReContaminationRatePerSecond = GS->GetReContaminationRatePerSecond();
+		ReContaminationProtectionThreshold = GS->GetReContaminationProtectionThreshold();
 	}
 	SimulateTreatment(DeltaSeconds, Weather);
 }
@@ -270,13 +295,29 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	}
 	const float Weather = FMath::Clamp(WeatherSeverity, 0.f, 1.f);
 
-	// 1. Weather degrades protection on every section.
-	const float Degradation = ProtectionDegradationPerSecond * Weather * DeltaSeconds;
+	// SIM-2: degradation is paused (or slowed) during an active holdover so
+	// expiry is the clock players actually fight, not the abort.
+	const bool bInHoldover = (HoldoverState == EHoldoverState::HoldoverActive);
+	const float DegScale = bInHoldover ? HoldoverDegradationScale : 1.f;
+	const float Degradation = ProtectionDegradationPerSecond * Weather * DegScale * DeltaSeconds;
 	for (AHoldoverSurfaceSection* Section : Sections)
 	{
 		if (Section)
 		{
 			Section->ApplyDegradation(Degradation);
+		}
+	}
+
+	// SIM-3: precipitation re-contaminates unprotected sections.
+	if (ReContaminationRatePerSecond > 0.f && Weather > 0.f)
+	{
+		const float Contamination = ReContaminationRatePerSecond * Weather * DeltaSeconds;
+		for (AHoldoverSurfaceSection* Section : Sections)
+		{
+			if (Section && Section->ProtectionPercent < ReContaminationProtectionThreshold)
+			{
+				Section->ApplyContamination(Contamination);
+			}
 		}
 	}
 
@@ -299,10 +340,14 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	{
 		if (!AreAllSectionsCleanAndProtected())
 		{
-			// Degradation forced retreatment mid-holdover.
+			// SIM-2: degradation forced retreatment mid-holdover — abort costs something.
 			HoldoverState = EHoldoverState::Incomplete;
 			HoldoverRemaining = 0.f;
 			UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover aborted (treatment lost)"), *GetName());
+			if (AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr)
+			{
+				GS->RegisterPenalty(GS->GetHoldoverAbortPenalty(), TEXT("Holdover aborted"));
+			}
 		}
 		else
 		{

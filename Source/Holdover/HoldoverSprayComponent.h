@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "HoldoverFluidData.h"
 #include "HoldoverPlayerState.h"
 #include "HoldoverSprayComponent.generated.h"
 
@@ -26,7 +27,12 @@ class HOLDOVER_API UHoldoverSprayComponent : public UActorComponent
 public:
 	UHoldoverSprayComponent();
 
-	// --- tuning (data-asset-ise later per the playbook) ---
+	// --- tuning (DES-5: data asset overrides local defaults when set) ---
+	/** DES-5: fluid tuning data asset. When null, the local defaults below are used. */
+	UPROPERTY(EditDefaultsOnly, Category = "Spray")
+	TObjectPtr<UHoldoverFluidData> FluidData;
+
+	// Local fallbacks (used when FluidData is null).
 	UPROPERTY(EditDefaultsOnly, Category = "Spray")
 	float SprayRange = 600.f;
 
@@ -52,6 +58,15 @@ public:
 	/** DES-2: seconds to refill at a station (not instant). */
 	UPROPERTY(EditDefaultsOnly, Category = "Spray")
 	float RefillDuration = 3.f;
+
+	/** Getters that prefer the data asset over local defaults. */
+	float GetSprayRange() const { return FluidData ? FluidData->SprayRange : SprayRange; }
+	float GetCleanRate() const { return FluidData ? FluidData->CleanRatePerSecond : CleanRatePerSecond; }
+	float GetProtectRate() const { return FluidData ? FluidData->ProtectRatePerSecond : ProtectRatePerSecond; }
+	float GetFluidCapacity() const { return FluidData ? FluidData->FluidCapacity : FluidCapacity; }
+	float GetTypeIUseRate() const { return FluidData ? FluidData->TypeIUsePerSecond : TypeIUsePerSecond; }
+	float GetTypeIVUseRate() const { return FluidData ? FluidData->TypeIVUsePerSecond : TypeIVUsePerSecond; }
+	float GetRefillDuration() const { return FluidData ? FluidData->RefillDuration : RefillDuration; }
 
 	/** MP-8: pure dt clamp (world-free, testable) — rejects <=0, caps at 2x interval. */
 	static float ClampSprayDt(float RequestedDt, float Interval);

@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "HoldoverAircraft.h"
 #include "HoldoverDispatcherLines.h"
+#include "HoldoverGameState.h"
 #include "HoldoverPlayerState.h"
 #include "HoldoverSprayComponent.h"
 #include "HoldoverSurfaceSection.h"
@@ -61,8 +62,8 @@ bool FHoldoverFluidRulesTest::RunTest(const FString& Parameters)
 	Spray->CarriedFluidType = EHoldoverFluidType::TypeI;
 	Spray->FluidLevel = 100.f;
 	TestTrue(TEXT("Type I applied"), Spray->ApplySpray(Section, 1.f));
-	TestEqual(TEXT("Cleanliness raised"), Section->CleanlinessPercent, Spray->CleanRatePerSecond, KINDA_SMALL_NUMBER);
-	TestEqual(TEXT("Tank consumed"), Spray->FluidLevel, 100.f - Spray->TypeIUsePerSecond, KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("Cleanliness raised"), Section->CleanlinessPercent, Spray->GetCleanRate(), KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("Tank consumed"), Spray->FluidLevel, 100.f - Spray->GetTypeIUseRate(), KINDA_SMALL_NUMBER);
 
 	// Empty tank stops treatment.
 	Spray->FluidLevel = 0.f;
@@ -73,8 +74,8 @@ bool FHoldoverFluidRulesTest::RunTest(const FString& Parameters)
 	Spray->CarriedFluidType = EHoldoverFluidType::TypeIV;
 	Spray->FluidLevel = 100.f;
 	TestTrue(TEXT("Type IV applied on clean section"), Spray->ApplySpray(Section, 1.f));
-	TestEqual(TEXT("Protection raised"), Section->ProtectionPercent, Spray->ProtectRatePerSecond, KINDA_SMALL_NUMBER);
-	TestEqual(TEXT("Tank consumed by Type IV"), Spray->FluidLevel, 100.f - Spray->TypeIVUsePerSecond, KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("Protection raised"), Section->ProtectionPercent, Spray->GetProtectRate(), KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("Tank consumed by Type IV"), Spray->FluidLevel, 100.f - Spray->GetTypeIVUseRate(), KINDA_SMALL_NUMBER);
 
 	return true;
 }
@@ -249,6 +250,56 @@ bool FHoldoverDispatcherBankTest::RunTest(const FString& Parameters)
 		const FString Line = HoldoverDispatch::GetLine(EDispatchEvent::JetBlast, i, TEXT(""));
 		TestFalse(FString::Printf(TEXT("Repetition %d returns a line"), i), Line.IsEmpty());
 	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverContaminationTest,
+	"Holdover.Treatment.Contamination",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverContaminationTest::RunTest(const FString& Parameters)
+{
+	// SIM-3: unprotected sections lose cleanliness; protected sections do not.
+	AHoldoverSurfaceSection* Unprotected = NewObject<AHoldoverSurfaceSection>(GetTransientPackage());
+	AHoldoverSurfaceSection* Protected = NewObject<AHoldoverSurfaceSection>(GetTransientPackage());
+
+	Unprotected->CleanlinessPercent = 100.f;
+	Unprotected->ProtectionPercent = 0.f;
+	Protected->CleanlinessPercent = 100.f;
+	Protected->ProtectionPercent = 80.f;
+
+	// 1 second at 1.0 weather, 3%/s rate.
+	Unprotected->ApplyContamination(3.f);
+	Protected->ApplyContamination(3.f); // caller checks threshold, but let's verify the mechanic
+
+	TestEqual(TEXT("Unprotected section contaminated"), Unprotected->CleanlinessPercent, 97.f, KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("Protected section (direct call) also contaminated"), Protected->CleanlinessPercent, 97.f, KINDA_SMALL_NUMBER);
+
+	// Contamination clamps at 0.
+	Unprotected->ApplyContamination(200.f);
+	TestEqual(TEXT("Contamination clamps at 0"), Unprotected->CleanlinessPercent, 0.f, KINDA_SMALL_NUMBER);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverNetPayTest,
+	"Holdover.Treatment.NetPay",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverNetPayTest::RunTest(const FString& Parameters)
+{
+	// SIM-4: net pay = money - deductions.
+	AHoldoverGameState* GS = NewObject<AHoldoverGameState>(GetTransientPackage());
+
+	// Simulate the state without a world.
+	GS->Money = 200;
+	GS->Deductions = 75;
+	TestEqual(TEXT("Net pay = money - deductions"), GS->GetNetPay(), 125);
+
+	GS->Money = 50;
+	GS->Deductions = 100;
+	TestEqual(TEXT("Net pay can be negative"), GS->GetNetPay(), -50);
 
 	return true;
 }

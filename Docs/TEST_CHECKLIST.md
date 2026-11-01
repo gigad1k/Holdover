@@ -142,17 +142,20 @@ via the `HoldoverEditor` MCP toolset. See Docs/CHANGELOG.md for the per-issue ev
       players' stats with names.
 - [ ] DES-2 one-tank relay forced: a solo player cannot clean AND protect without switching
       at the station. **Manual verification required.**
-- [ ] SIM-1 weather reset/randomisation per shift.
-- [ ] SIM-2 holdover abort cost / degradation pause.
-- [ ] SIM-3 precipitation re-contaminates unprotected sections.
-- [ ] SIM-4 net pay = money - deductions; penalties can fail a shift.
-- [x] DES-3 dispatcher line bank: 79 reactive lines across 17 events, keyed by event + repetition
-      + blame. Test: `Holdover.Treatment.DispatcherBank`. **Not run.**
-- [x] DES-3 ice stumble: physical launch on ice entry (not just speed change). **Not run.**
-- [x] DES-3 jet blast cooldown: per-player 5s cooldown on penalties. **Not run.**
-- [ ] **Manual (2-player)**: hear varied dispatcher lines across a full shift (no repeats in
-      first 3-5 of each event); feel the ice stumble; confirm jet blast penalty fires once
-      per entry (not every frame).
-- [ ] DES-3 knockable props (physics props players can bump over). _(deferred)_
-- [ ] DES-4/DES-5 data assets (`AHoldoverShiftData`, `UHoldoverFluidData`).
+- [x] SIM-1 weather reset/randomisation per shift — sine-based squalls/lulls, randomised base
+      severity + phase. **Not run.**
+- [x] SIM-2 holdover abort cost — degradation paused during holdover (expiry is the threat);
+      abort charges `HoldoverAbortPenalty`. **Not run.**
+- [x] SIM-3 precipitation re-contaminates unprotected sections — `ApplyContamination` on
+      sections below `ReContaminationProtectionThreshold`. Test: `Holdover.Treatment.Contamination`.
+      **Not run.**
+- [x] SIM-4 net pay = money − deductions; `bShiftPassed` requires positive net pay + quota.
+      Per-aircraft deadlines (`PerAircraftDeadlineSeconds`). Test: `Holdover.Treatment.NetPay`.
+      **Not run.**
+- [x] DES-5 data assets: `UHoldoverFluidData` + `AHoldoverShiftData` created; spray component
+      and GameState read from them with local fallbacks. **Not run.**
+- [ ] **Manual**: weather visibly oscillates (squalls and lulls) over a shift; holdover clock
+      is the real threat (not degradation); unprotected sections get dirty in snow; late
+      departure fires per-aircraft (not just at shift end); net pay shows on HUD.
+- [ ] DES-4 3–5 escalating shift profiles (`AHoldoverShiftData` assets).
 - [ ] DES-6 playtest gate: did anyone laugh unprompted; did players talk to coordinate.

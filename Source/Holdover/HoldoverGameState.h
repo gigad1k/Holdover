@@ -7,6 +7,8 @@
 #include "HoldoverDispatcherLines.h"
 #include "HoldoverGameState.generated.h"
 
+class UHoldoverShiftData;
+
 UENUM(BlueprintType)
 enum class EShiftState : uint8
 {
@@ -27,15 +29,25 @@ class HOLDOVER_API AHoldoverGameState : public AGameStateBase
 public:
 	AHoldoverGameState();
 
-	// --- weather ---
+	// --- weather (SIM-1: squalls and lulls, randomised per shift) ---
 	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Weather")
 	float WeatherSeverity = 0.f;
 
+	/** DES-5: shift tuning data asset. When null, local defaults are used. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shift")
+	TObjectPtr<UHoldoverShiftData> ShiftData;
+
+	// Local fallbacks (used when ShiftData is null).
 	UPROPERTY(EditDefaultsOnly, Category = "Weather")
 	bool bAutoRampWeather = true;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Weather")
 	float WeatherRampPerSecond = 0.01f;
+
+	// SIM-1: squall/lull oscillation state (server-only).
+	float WeatherBaseSeverity = 0.3f;
+	float WeatherPhase = 0.f;
+	float WeatherTime = 0.f;
 
 	void SetWeatherSeverity(float NewSeverity);
 
@@ -81,6 +93,19 @@ public:
 
 	/** Duration of the current/last shift (for elapsed-time calculations). */
 	float GetShiftDuration() const { return LastShiftDuration; }
+
+	// --- DES-5: shift tuning accessors (ShiftData with local fallbacks) ---
+	float GetHoldoverDuration() const;
+	float GetWeatherBurnMultiplier() const;
+	float GetProtectionDegradationPerSecond() const;
+	float GetHoldoverDegradationScale() const;
+	float GetReContaminationRatePerSecond() const;
+	float GetReContaminationProtectionThreshold() const;
+	int32 GetHoldoverAbortPenalty() const;
+	float GetPerAircraftDeadlineSeconds() const;
+
+	/** SIM-4: net pay = money - deductions. */
+	int32 GetNetPay() const { return Money - Deductions; }
 
 	/** Starts a fresh shift with the previous duration/quota (repeatable loop). */
 	void RestartShift();
