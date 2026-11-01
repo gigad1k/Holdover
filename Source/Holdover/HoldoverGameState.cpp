@@ -4,6 +4,7 @@
 #include "EngineUtils.h"
 #include "HoldoverAircraft.h"
 #include "HoldoverAudioLibrary.h"
+#include "HoldoverPlayerState.h"
 #include "Net/UnrealNetwork.h"
 
 AHoldoverGameState::AHoldoverGameState()
@@ -30,6 +31,19 @@ void AHoldoverGameState::StartShift(float DurationSeconds, int32 InQuota)
 	Money = 0;
 	Deductions = 0;
 	bShiftPassed = false;
+
+	// DES-2: reset per-player attribution for the new shift.
+	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (const AController* C = It->Get())
+		{
+			if (AHoldoverPlayerState* PS = C->GetPlayerState<AHoldoverPlayerState>())
+			{
+				PS->ResetForNewShift();
+			}
+		}
+	}
+
 	AddDispatch(FString::Printf(TEXT("Shift start. Quota: %d on-time departures."), Quota));
 }
 
@@ -73,30 +87,32 @@ void AHoldoverGameState::RestartShift()
 	}
 }
 
-void AHoldoverGameState::RegisterDeparture(bool bOnTime)
+void AHoldoverGameState::RegisterDeparture(bool bOnTime, AHoldoverPlayerState* ResponsiblePlayer)
 {
+	const FString Who = ResponsiblePlayer ? ResponsiblePlayer->GetShortName() + TEXT(" ") : TEXT("");
 	if (bOnTime)
 	{
 		OnTimeDepartures++;
 		Money += PayPerOnTimeDeparture;
-		AddDispatch(FString::Printf(TEXT("Departure cleared. +$%d."), PayPerOnTimeDeparture));
+		AddDispatch(FString::Printf(TEXT("%sdeparture cleared. +$%d."), *Who, PayPerOnTimeDeparture));
 	}
 	else
 	{
 		LateDepartures++;
 		Deductions += LateDepartureDeduction;
-		AddDispatch(FString::Printf(TEXT("LATE departure. -$%d."), LateDepartureDeduction));
+		AddDispatch(FString::Printf(TEXT("%sLATE departure. -$%d."), *Who, LateDepartureDeduction));
 	}
 }
 
-void AHoldoverGameState::RegisterPenalty(int32 Amount, const FString& Reason)
+void AHoldoverGameState::RegisterPenalty(int32 Amount, const FString& Reason, AHoldoverPlayerState* ResponsiblePlayer)
 {
 	if (Amount <= 0)
 	{
 		return;
 	}
 	Deductions += Amount;
-	AddDispatch(FString::Printf(TEXT("%s -$%d"), *Reason, Amount));
+	const FString Who = ResponsiblePlayer ? ResponsiblePlayer->GetShortName() + TEXT(" ") : TEXT("");
+	AddDispatch(FString::Printf(TEXT("%s%s -$%d"), *Who, *Reason, Amount));
 }
 
 void AHoldoverGameState::AddDispatch(const FString& Line)

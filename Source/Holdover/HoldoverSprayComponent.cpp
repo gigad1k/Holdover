@@ -41,21 +41,19 @@ void UHoldoverSprayComponent::SetSpraying(bool bEnabled)
 	}
 }
 
-void UHoldoverSprayComponent::ToggleActiveFluid()
+void UHoldoverSprayComponent::BeginRefill(EHoldoverFluidType NewType)
 {
-	ActiveFluidType = (ActiveFluidType == EHoldoverFluidType::TypeI)
-		? EHoldoverFluidType::TypeIV
-		: EHoldoverFluidType::TypeI;
-
-	// Owner applies the flip optimistically for HUD responsiveness; the server
-	// value (from this RPC) is authoritative and replicates back.
-	ServerSetFluid(ActiveFluidType);
+	// Owner sends the request; the server validates and starts the timed refill.
+	ServerBeginRefill(NewType);
 }
 
-void UHoldoverSprayComponent::RefillTanks()
+float UHoldoverSprayComponent::GetRefillProgress() const
 {
-	TypeIFluid = FluidCapacity;
-	TypeIVFluid = FluidCapacity;
+	if (!bRefilling || RefillDuration <= 0.f)
+	{
+		return bRefilling ? 1.f : 0.f;
+	}
+	return 1.f - (RefillTimeRemaining / RefillDuration);
 }
 
 bool UHoldoverSprayComponent::ApplySpray(AHoldoverSurfaceSection* Target, float DeltaSeconds)
@@ -65,14 +63,14 @@ bool UHoldoverSprayComponent::ApplySpray(AHoldoverSurfaceSection* Target, float 
 		return false;
 	}
 
-	if (ActiveFluidType == EHoldoverFluidType::TypeI)
+	if (CarriedFluidType == EHoldoverFluidType::TypeI)
 	{
-		if (TypeIFluid <= 0.f)
+		if (FluidLevel <= 0.f)
 		{
 			return false;
 		}
 		Target->ApplyCleaning(CleanRatePerSecond * DeltaSeconds);
-		TypeIFluid = FMath::Max(0.f, TypeIFluid - TypeIUsePerSecond * DeltaSeconds);
+		FluidLevel = FMath::Max(0.f, FluidLevel - TypeIUsePerSecond * DeltaSeconds);
 		return true;
 	}
 
@@ -82,18 +80,34 @@ bool UHoldoverSprayComponent::ApplySpray(AHoldoverSurfaceSection* Target, float 
 		UE_LOG(LogHoldover, Verbose, TEXT("Type IV rejected (section not clean): %s"), *Target->GetName());
 		return false;
 	}
-	if (TypeIVFluid <= 0.f)
+	if (FluidLevel <= 0.f)
 	{
 		return false;
 	}
 	Target->ApplyProtection(ProtectRatePerSecond * DeltaSeconds);
-	TypeIVFluid = FMath::Max(0.f, TypeIVFluid - TypeIVUsePerSecond * DeltaSeconds);
+	FluidLevel = FMath::Max(0.f, FluidLevel - TypeIVUsePerSecond * DeltaSeconds);
 	return true;
 }
 
 void UHoldoverSprayComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// Timed refill countdown (server-driven).
+	if (bRefilling && HasAuthority())
+	{
+		RefillTimeRemaining -= DeltaTime;
+		if (RefillTimeRemaining <= 0.f)
+		{
+			RefillTimeRemaining = 0.f;
+			bRefilling = false;
+			FluidLevel = FluidCapacity;
+			UE_LOG(LogHoldover, Display, TEXT("Refill complete (%s) -> %s, %.0f"),
+				*GetNameSafe(GetOwner()),
+				CarriedFluidType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV"),
+				FluidLevel);
+		}
+	}
 
 	const AActor* Owner = GetOwner();
 	const APawn* OwnerPawn = Cast<APawn>(Owner);
@@ -160,17 +174,13 @@ void UHoldoverSprayComponent::UpdateTargetFromTrace()
 			CurrentTargetSection = Section;
 
 			// Cosmetic pre-validation hint (the server enforces the real rules).
-			if (ActiveFluidType == EHoldoverFluidType::TypeIV && !Section->IsClean())
+			if (CarriedFluidType == EHoldoverFluidType::TypeIV && !Section->IsClean())
 			{
-				TargetHint = FText::FromString(TEXT("Section not clean - use Type I first"));
+				TargetHint = FText::FromString(TEXT("Section not clean - need Type I crew"));
 			}
-			else if (ActiveFluidType == EHoldoverFluidType::TypeI && TypeIFluid <= 0.f)
+			else if (FluidLevel <= 0.f)
 			{
-				TargetHint = FText::FromString(TEXT("Type I tank empty - refill (E)"));
-			}
-			else if (ActiveFluidType == EHoldoverFluidType::TypeIV && TypeIVFluid <= 0.f)
-			{
-				TargetHint = FText::FromString(TEXT("Type IV tank empty - refill (E)"));
+				TargetHint = FText::FromString(TEXT("Tank empty - refill at station"));
 			}
 		}
 	}
@@ -224,20 +234,30 @@ void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection
 	ApplySpray(Target, Dt);
 }
 
-void UHoldoverSprayComponent::ServerSetFluid_Implementation(EHoldoverFluidType NewFluid)
+void UHoldoverSprayComponent::ServerBeginRefill_Implementation(EHoldoverFluidType NewType)
 {
-	ActiveFluidType = NewFluid;
+	// DES-2: one-tank rule — choosing a fluid at the station replaces whatever
+	// you were carrying. The refill takes RefillDuration seconds.
+	CarriedFluidType = NewType;
+	FluidLevel = 0.f;
+	bRefilling = true;
+	RefillTimeRemaining = RefillDuration;
+	UE_LOG(LogHoldover, Display, TEXT("Refill started (%s) -> %s, %.1fs"),
+		*GetNameSafe(GetOwner()),
+		NewType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV"),
+		RefillDuration);
 }
 
 void UHoldoverSprayComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(UHoldoverSprayComponent, TypeIFluid);
-	DOREPLIFETIME(UHoldoverSprayComponent, TypeIVFluid);
-	DOREPLIFETIME(UHoldoverSprayComponent, ActiveFluidType);
+	DOREPLIFETIME(UHoldoverSprayComponent, FluidLevel);
+	DOREPLIFETIME(UHoldoverSprayComponent, CarriedFluidType);
+	DOREPLIFETIME(UHoldoverSprayComponent, bRefilling);
+	DOREPLIFETIME(UHoldoverSprayComponent, RefillTimeRemaining);
 }
 
 void UHoldoverSprayComponent::OnRep_Fluid()
 {
-	// HUD reads the tank levels directly.
+	// HUD reads the tank level and fluid type directly.
 }

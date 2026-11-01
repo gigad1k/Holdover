@@ -1,5 +1,28 @@
 # CHANGELOG
 
+## 2026-10-31 — Phase 7.6: DES-2 PlayerState + one-tank rule
+- `AHoldoverPlayerState`: per-player earnings/penalties/departures attribution, replicated;
+  `CarriedFluidType` (one-tank rule). Credited on departure request and shown on the results
+  screen ("Dan [Type I] +$100 -$25 departures 2").
+- One-tank-per-player: spray component carries a single `FluidLevel` + `CarriedFluidType`
+  (replaces `TypeIFluid`/`TypeIVFluid`/`ActiveFluidType`). Q toggle removed — fluid is chosen
+  at the refill station.
+- Timed refills: `BeginRefill(Type)` at a refill station starts a `RefillDuration` (3s) countdown;
+  `RefillTanks()` removed. `HoldoverTestInteractable` is now a refill station with a configurable
+  `StationFluidType` (place one per type to force the clean→protect relay).
+- Dispatcher lines now name the responsible player ("Dan departure cleared. +$100.").
+- Results screen shows per-player attribution lines.
+- Tests: `Holdover.Treatment.PlayerStateAttribution`, `Holdover.Treatment.OneTankRefill` added;
+  `Holdover.Treatment.FluidRules` updated for single-tank API. Not run — manual build required.
+
+## 2026-10-31 — Phase 7.6: DES-1 staggered arrivals + SIM-5 section ownership
+- `ArrivalDelay` + `bArrived` (replicated): aircraft are hidden/off-collision until the shift
+  clock passes their delay. Dispatch announces arrival. `ResetForNewShift` restores the hidden state.
+- `AHoldoverSurfaceSection::OwningAircraft` explicit ownership: radius-gather no longer steals
+  sections owned by another aircraft (SIM-5). `RegisterSection` claims unowned sections only.
+- Shift spec updated to the plan's first shift: 2 aircraft, 8 min, quota 2 (`HoldoverGameMode.h`).
+- Test: `Holdover.Treatment.SectionOwnership` added. Not run — manual build required.
+
 ## 2026-10-29 — Phase 7: UMG HUD + dispatcher feed + placeholder audio
 - UMG HUD: `AHoldoverHUD` keeps the canvas centre reticle + interaction prompt and creates
   `UHoldoverHUDWidget` on BeginPlay; the widget builds its tree in C++ (`RebuildWidget`) and reads

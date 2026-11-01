@@ -84,8 +84,8 @@ public:
 	/** Starts a fresh shift with the previous duration/quota (repeatable loop). */
 	void RestartShift();
 
-	void RegisterDeparture(bool bOnTime);
-	void RegisterPenalty(int32 Amount, const FString& Reason);
+	void RegisterDeparture(bool bOnTime, class AHoldoverPlayerState* ResponsiblePlayer = nullptr);
+	void RegisterPenalty(int32 Amount, const FString& Reason, class AHoldoverPlayerState* ResponsiblePlayer = nullptr);
 	void AddDispatch(const FString& Line);
 
 	virtual void Tick(float DeltaSeconds) override;

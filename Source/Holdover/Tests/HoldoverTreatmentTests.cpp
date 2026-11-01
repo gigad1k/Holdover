@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "HoldoverAircraft.h"
+#include "HoldoverPlayerState.h"
 #include "HoldoverSprayComponent.h"
 #include "HoldoverSurfaceSection.h"
 #include "Misc/AutomationTest.h"
@@ -48,34 +49,31 @@ bool FHoldoverFluidRulesTest::RunTest(const FString& Parameters)
 	AHoldoverSurfaceSection* Section = NewObject<AHoldoverSurfaceSection>(GetTransientPackage());
 	UHoldoverSprayComponent* Spray = NewObject<UHoldoverSprayComponent>(GetTransientPackage());
 
-	// Wrong fluid: Type IV on a dirty section is rejected and consumes nothing.
-	Spray->ActiveFluidType = EHoldoverFluidType::TypeIV;
-	Spray->TypeIVFluid = 100.f;
+	// DES-2 one-tank rule: Type IV on a dirty section is rejected and consumes nothing.
+	Spray->CarriedFluidType = EHoldoverFluidType::TypeIV;
+	Spray->FluidLevel = 100.f;
 	TestFalse(TEXT("Type IV rejected on dirty section"), Spray->ApplySpray(Section, 1.f));
 	TestEqual(TEXT("Protection unchanged"), Section->ProtectionPercent, 0.f, KINDA_SMALL_NUMBER);
-	TestEqual(TEXT("Type IV tank untouched"), Spray->TypeIVFluid, 100.f, KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("Tank untouched on rejection"), Spray->FluidLevel, 100.f, KINDA_SMALL_NUMBER);
 
-	// Type I cleans and consumes only the Type I tank.
-	Spray->ActiveFluidType = EHoldoverFluidType::TypeI;
-	Spray->TypeIFluid = 100.f;
+	// Type I cleans and consumes the single tank.
+	Spray->CarriedFluidType = EHoldoverFluidType::TypeI;
+	Spray->FluidLevel = 100.f;
 	TestTrue(TEXT("Type I applied"), Spray->ApplySpray(Section, 1.f));
 	TestEqual(TEXT("Cleanliness raised"), Section->CleanlinessPercent, Spray->CleanRatePerSecond, KINDA_SMALL_NUMBER);
-	TestEqual(TEXT("Type I consumed"), Spray->TypeIFluid, 100.f - Spray->TypeIUsePerSecond, KINDA_SMALL_NUMBER);
-	TestEqual(TEXT("Type IV untouched"), Spray->TypeIVFluid, 100.f, KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("Tank consumed"), Spray->FluidLevel, 100.f - Spray->TypeIUsePerSecond, KINDA_SMALL_NUMBER);
 
-	// Empty Type I tank stops treatment.
-	Spray->TypeIFluid = 0.f;
-	TestFalse(TEXT("Empty Type I tank rejected"), Spray->ApplySpray(Section, 1.f));
+	// Empty tank stops treatment.
+	Spray->FluidLevel = 0.f;
+	TestFalse(TEXT("Empty tank rejected"), Spray->ApplySpray(Section, 1.f));
 
-	// Type IV protects a clean section and consumes only the Type IV tank.
+	// Type IV protects a clean section and consumes the single tank.
 	Section->CleanlinessPercent = 100.f;
-	Spray->ActiveFluidType = EHoldoverFluidType::TypeIV;
-	Spray->TypeIVFluid = 100.f;
-	Spray->TypeIFluid = 100.f;
+	Spray->CarriedFluidType = EHoldoverFluidType::TypeIV;
+	Spray->FluidLevel = 100.f;
 	TestTrue(TEXT("Type IV applied on clean section"), Spray->ApplySpray(Section, 1.f));
 	TestEqual(TEXT("Protection raised"), Section->ProtectionPercent, Spray->ProtectRatePerSecond, KINDA_SMALL_NUMBER);
-	TestEqual(TEXT("Type IV consumed"), Spray->TypeIVFluid, 100.f - Spray->TypeIVUsePerSecond, KINDA_SMALL_NUMBER);
-	TestEqual(TEXT("Type I untouched"), Spray->TypeIFluid, 100.f, KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("Tank consumed by Type IV"), Spray->FluidLevel, 100.f - Spray->TypeIVUsePerSecond, KINDA_SMALL_NUMBER);
 
 	return true;
 }
@@ -155,6 +153,62 @@ bool FHoldoverStateMachineTest::RunTest(const FString& Parameters)
 	B->ProtectionPercent = 100.f;
 	Aircraft->SimulateTreatment(0.1f, 0.f);
 	TestEqual(TEXT("Retreatment restarts holdover"), (int32)Aircraft->HoldoverState, (int32)EHoldoverState::HoldoverActive);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverPlayerStateAttributionTest,
+	"Holdover.Treatment.PlayerStateAttribution",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverPlayerStateAttributionTest::RunTest(const FString& Parameters)
+{
+	AHoldoverPlayerState* PS = NewObject<AHoldoverPlayerState>(GetTransientPackage());
+
+	// Earnings and penalties accumulate independently.
+	PS->AddEarnings(100);
+	PS->AddEarnings(50);
+	PS->AddPenalty(25);
+	TestEqual(TEXT("Earnings accumulated"), PS->Earnings, 150);
+	TestEqual(TEXT("Penalties accumulated"), PS->Penalties, 25);
+
+	// Departure counting.
+	PS->RecordDeparture();
+	PS->RecordDeparture();
+	TestEqual(TEXT("Departures counted"), PS->DeparturesHandled, 2);
+
+	// One-tank fluid choice.
+	PS->SetCarriedFluid(EHoldoverFluidType::TypeIV);
+	TestEqual(TEXT("Fluid choice stored"), (int32)PS->CarriedFluidType, (int32)EHoldoverFluidType::TypeIV);
+
+	// Reset clears per-shift stats.
+	PS->ResetForNewShift();
+	TestEqual(TEXT("Earnings reset"), PS->Earnings, 0);
+	TestEqual(TEXT("Penalties reset"), PS->Penalties, 0);
+	TestEqual(TEXT("Departures reset"), PS->DeparturesHandled, 0);
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverOneTankRefillTest,
+	"Holdover.Treatment.OneTankRefill",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverOneTankRefillTest::RunTest(const FString& Parameters)
+{
+	UHoldoverSprayComponent* Spray = NewObject<UHoldoverSprayComponent>(GetTransientPackage());
+
+	// DES-2 one-tank rule: carried fluid is Type I by default, single tank.
+	TestEqual(TEXT("Default fluid Type I"), (int32)Spray->CarriedFluidType, (int32)EHoldoverFluidType::TypeI);
+	TestEqual(TEXT("Default tank full"), Spray->FluidLevel, 100.f, KINDA_SMALL_NUMBER);
+
+	// The tank drains with use.
+	Spray->FluidLevel = 50.f;
+	TestEqual(TEXT("Tank level tracked"), Spray->FluidLevel, 50.f, KINDA_SMALL_NUMBER);
+
+	// Refill progress is 0 when not refilling.
+	TestFalse(TEXT("Not refilling initially"), Spray->IsRefilling());
+	TestEqual(TEXT("Refill progress zero"), Spray->GetRefillProgress(), 0.f, KINDA_SMALL_NUMBER);
 
 	return true;
 }

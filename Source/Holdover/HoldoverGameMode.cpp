@@ -7,11 +7,13 @@
 #include "HoldoverDeicingTruck.h"
 #include "HoldoverGameState.h"
 #include "HoldoverHUD.h"
+#include "HoldoverPlayerState.h"
 
 AHoldoverGameMode::AHoldoverGameMode()
 {
 	HUDClass = AHoldoverHUD::StaticClass();
 	GameStateClass = AHoldoverGameState::StaticClass();
+	PlayerStateClass = AHoldoverPlayerState::StaticClass();
 }
 
 void AHoldoverGameMode::BeginPlay()

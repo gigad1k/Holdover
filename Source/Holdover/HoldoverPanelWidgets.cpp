@@ -8,8 +8,10 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "EngineUtils.h"
+#include "GameFramework/PlayerState.h"
 #include "HoldoverAircraft.h"
 #include "HoldoverGameState.h"
+#include "HoldoverPlayerState.h"
 #include "HoldoverSurfaceSection.h"
 #include "Styling/CoreStyle.h"
 
@@ -194,6 +196,16 @@ TSharedRef<SWidget> UHoldoverShiftResultsWidget::RebuildWidget()
 		Box->AddChildToVerticalBox(VerdictLine);
 		Box->AddChildToVerticalBox(BreakdownLine);
 
+		// DES-2: per-player attribution lines.
+		PlayerBox = NewObject<UVerticalBox>(this, TEXT("PlayerBox"), RF_Transient);
+		Box->AddChildToVerticalBox(PlayerBox);
+		for (int32 i = 0; i < MaxPlayerLines; ++i)
+		{
+			UTextBlock* Line = MakeHoldoverText(this, *FString::Printf(TEXT("PlayerLine%d"), i), 12, FLinearColor(0.75f, 0.85f, 1.f));
+			PlayerLines.Add(Line);
+			PlayerBox->AddChildToVerticalBox(Line);
+		}
+
 		WidgetTree->RootWidget = Panel;
 	}
 	return Super::RebuildWidget();
@@ -226,5 +238,36 @@ void UHoldoverShiftResultsWidget::NativeTick(const FGeometry& MyGeometry, float 
 	{
 		BreakdownLine->SetText(FText::FromString(FString::Printf(TEXT("On-time %d/%d   pay $%d   deductions $%d   press E on the cube for a new shift"),
 			GS->OnTimeDepartures, GS->Quota, GS->Money, GS->Deductions)));
+	}
+
+	// DES-2: per-player attribution on the results screen.
+	if (GetWorld() && PlayerLines.Num() > 0)
+	{
+		int32 LineIndex = 0;
+		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It && LineIndex < MaxPlayerLines; ++It)
+		{
+			const APlayerController* PC = It->Get();
+			if (!PC)
+			{
+				continue;
+			}
+			const AHoldoverPlayerState* PS = PC->GetPlayerState<AHoldoverPlayerState>();
+			if (!PS)
+			{
+				continue;
+			}
+			const FString FluidName = PS->CarriedFluidType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV");
+			PlayerLines[LineIndex]->SetText(FText::FromString(FString::Printf(TEXT("%s  [%s]  +$%d  -$%d  departures %d"),
+				*PS->GetShortName(), *FluidName, PS->Earnings, PS->Penalties, PS->DeparturesHandled)));
+			++LineIndex;
+		}
+		// Hide unused lines.
+		for (int32 i = LineIndex; i < PlayerLines.Num(); ++i)
+		{
+			if (PlayerLines[i])
+			{
+				PlayerLines[i]->SetText(FText::GetEmpty());
+			}
+		}
 	}
 }

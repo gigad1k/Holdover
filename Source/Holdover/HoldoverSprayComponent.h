@@ -4,22 +4,19 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "HoldoverPlayerState.h"
 #include "HoldoverSprayComponent.generated.h"
 
 class AHoldoverSurfaceSection;
 class USceneComponent;
 
-UENUM(BlueprintType)
-enum class EHoldoverFluidType : uint8
-{
-	TypeI	UMETA(DisplayName = "Type I (clean)"),
-	TypeIV	UMETA(DisplayName = "Type IV (protect)")
-};
-
 /**
+ * DES-2 one-tank rule: each player carries exactly one fluid type (Type I or
+ * Type IV). The choice is made at a refill station; refills are timed, not
+ * instant. This forces the clean -> protect relay between players.
+ *
  * Server-validated spray: the owning client traces and requests; the server
- * checks range + fluid and applies treatment. Type I cleans, Type IV protects
- * (clean sections only). Tanks are separate and replicated.
+ * checks range + fluid and applies treatment.
  */
 UCLASS(ClassGroup = (Holdover), meta = (BlueprintSpawnableComponent))
 class HOLDOVER_API UHoldoverSprayComponent : public UActorComponent
@@ -52,18 +49,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Spray")
 	float SprayRequestInterval = 0.1f;
 
+	/** DES-2: seconds to refill at a station (not instant). */
+	UPROPERTY(EditDefaultsOnly, Category = "Spray")
+	float RefillDuration = 3.f;
+
 	/** MP-8: pure dt clamp (world-free, testable) — rejects <=0, caps at 2x interval. */
 	static float ClampSprayDt(float RequestedDt, float Interval);
 
-	// --- state ---
+	// --- state (single tank) ---
 	UPROPERTY(ReplicatedUsing = OnRep_Fluid, BlueprintReadOnly, Category = "Spray")
-	float TypeIFluid = 100.f;
+	float FluidLevel = 100.f;
 
 	UPROPERTY(ReplicatedUsing = OnRep_Fluid, BlueprintReadOnly, Category = "Spray")
-	float TypeIVFluid = 100.f;
-
-	UPROPERTY(ReplicatedUsing = OnRep_Fluid, BlueprintReadOnly, Category = "Spray")
-	EHoldoverFluidType ActiveFluidType = EHoldoverFluidType::TypeI;
+	EHoldoverFluidType CarriedFluidType = EHoldoverFluidType::TypeI;
 
 	/** Cosmetic client-side target for HUD feedback. */
 	UPROPERTY(Transient, BlueprintReadOnly, Category = "Spray")
@@ -89,16 +87,22 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Spray")
 	bool IsSpraying() const { return bSpraying; }
 
-	UFUNCTION(BlueprintCallable, Category = "Spray")
-	void ToggleActiveFluid();
+	/**
+	 * DES-2: begin a timed refill of the chosen fluid type. Replaces the old
+	 * instant RefillTanks. Server-authoritative; called from refill stations.
+	 */
+	void BeginRefill(EHoldoverFluidType NewType);
 
-	UFUNCTION(BlueprintCallable, Category = "Spray")
-	void RefillTanks();
+	/** True while a timed refill is in progress. */
+	bool IsRefilling() const { return bRefilling; }
+
+	/** 0..1 progress of the current refill (for HUD). */
+	float GetRefillProgress() const;
 
 	/**
 	 * Core treatment rules (server-side; testable without a world).
-	 * Type I: raises cleanliness, consumes Type I tank.
-	 * Type IV: only on clean sections, raises protection, consumes Type IV tank.
+	 * Type I: raises cleanliness, consumes tank.
+	 * Type IV: only on clean sections, raises protection, consumes tank.
 	 * Returns true if treatment was applied.
 	 */
 	bool ApplySpray(AHoldoverSurfaceSection* Target, float DeltaSeconds);
@@ -110,7 +114,7 @@ protected:
 	void ServerSpray(AHoldoverSurfaceSection* Target, float DeltaSeconds);
 
 	UFUNCTION(Server, Reliable)
-	void ServerSetFluid(EHoldoverFluidType NewFluid);
+	void ServerBeginRefill(EHoldoverFluidType NewType);
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -121,6 +125,13 @@ protected:
 
 	bool bSpraying = false;
 	float RequestAccumulator = 0.f;
+
+	// Timed refill state (server-driven, replicated for HUD).
+	UPROPERTY(Replicated)
+	bool bRefilling = false;
+
+	UPROPERTY(Replicated)
+	float RefillTimeRemaining = 0.f;
 
 	UPROPERTY(Transient)
 	class UAudioComponent* HissComponent = nullptr;

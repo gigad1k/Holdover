@@ -5,6 +5,7 @@
 #include "EngineUtils.h"
 #include "Holdover.h"
 #include "HoldoverGameState.h"
+#include "HoldoverPlayerState.h"
 #include "HoldoverSurfaceSection.h"
 #include "Net/UnrealNetwork.h"
 
@@ -48,9 +49,30 @@ void AHoldoverAircraft::Interact_Implementation(AActor* Interactor)
 
 	if (TryDepart())
 	{
+		// DES-2: attribute the departure to the player who requested it.
+		AHoldoverPlayerState* PS = nullptr;
+		if (const APawn* Pawn = Cast<APawn>(Interactor))
+		{
+			if (const AController* C = Pawn->GetController())
+			{
+				PS = C->GetPlayerState<AHoldoverPlayerState>();
+			}
+		}
+		if (PS)
+		{
+			PS->RecordDeparture();
+			if (bOnTime)
+			{
+				PS->AddEarnings(GS ? GS->PayPerOnTimeDeparture : 100);
+			}
+			else
+			{
+				PS->AddPenalty(GS ? GS->LateDepartureDeduction : 50);
+			}
+		}
 		if (GS)
 		{
-			GS->RegisterDeparture(bOnTime);
+			GS->RegisterDeparture(bOnTime, PS);
 		}
 		UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' departed (%s)"), *GetName(), bOnTime ? TEXT("on-time") : TEXT("late"));
 	}

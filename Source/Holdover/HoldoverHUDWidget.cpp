@@ -87,19 +87,22 @@ void UHoldoverHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 		Results->SetVisibility(bEnded ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
 	}
 
-	// Treatment panel: fluid, tanks, weather, current target (from the possessed pawn).
+	// Treatment panel: fluid, tank level, weather, current target (from the possessed pawn).
 	if (TreatmentLine)
 	{
 		FString Line = TEXT("");
 		const APawn* Pawn = GetOwningPlayer() ? GetOwningPlayer()->GetPawn() : nullptr;
 		if (const UHoldoverSprayComponent* Spray = Pawn ? Pawn->FindComponentByClass<UHoldoverSprayComponent>() : nullptr)
 		{
-			const bool bTypeI = Spray->ActiveFluidType == EHoldoverFluidType::TypeI;
-			Line = FString::Printf(TEXT("%s [Q]   Type I %.0f%%%s   Type IV %.0f%%%s   weather %.0f%%"),
+			const bool bTypeI = Spray->CarriedFluidType == EHoldoverFluidType::TypeI;
+			Line = FString::Printf(TEXT("%s   tank %.0f%%%s   weather %.0f%%"),
 				bTypeI ? TEXT("TYPE I (clean)") : TEXT("TYPE IV (protect)"),
-				Spray->TypeIFluid, Spray->TypeIFluid <= 0.f ? TEXT(" [EMPTY]") : TEXT(""),
-				Spray->TypeIVFluid, Spray->TypeIVFluid <= 0.f ? TEXT(" [EMPTY]") : TEXT(""),
+				Spray->FluidLevel, Spray->FluidLevel <= 0.f ? TEXT(" [EMPTY]") : TEXT(""),
 				GS ? GS->WeatherSeverity * 100.f : 0.f);
+			if (Spray->IsRefilling())
+			{
+				Line += FString::Printf(TEXT("   refilling %.0f%%"), Spray->GetRefillProgress() * 100.f);
+			}
 			if (AHoldoverSurfaceSection* Section = Spray->CurrentTargetSection.Get())
 			{
 				Line += FString::Printf(TEXT("   target %s clean %.0f%% prot %.0f%%"),

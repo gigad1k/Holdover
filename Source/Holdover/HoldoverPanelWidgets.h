@@ -54,7 +54,7 @@ protected:
 	static constexpr int32 MaxLines = 5;
 };
 
-/** Shift-end results banner (pay, deductions, quota). Hidden until the shift ends. */
+/** Shift-end results banner (pay, deductions, quota, per-player attribution). Hidden until the shift ends. */
 UCLASS()
 class HOLDOVER_API UHoldoverShiftResultsWidget : public UUserWidget
 {
@@ -69,4 +69,8 @@ protected:
 	UPROPERTY(Transient) UBorder* Panel;
 	UPROPERTY(Transient) UTextBlock* VerdictLine;
 	UPROPERTY(Transient) UTextBlock* BreakdownLine;
+	UPROPERTY(Transient) UVerticalBox* PlayerBox;
+	UPROPERTY(Transient) TArray<UTextBlock*> PlayerLines;
+
+	static constexpr int32 MaxPlayerLines = 4;
 };

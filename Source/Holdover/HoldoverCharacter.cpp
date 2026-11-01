@@ -225,10 +225,8 @@ void AHoldoverCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void AHoldoverCharacter::ToggleFluid(const FInputActionValue& Value)
 {
-	if (SprayComponent)
-	{
-		SprayComponent->ToggleActiveFluid();
-	}
+	// DES-2 one-tank rule: fluid is chosen at the refill station, not toggled.
+	// Q is reserved for future use (e.g. radio / callout).
 }
 
 void AHoldoverCharacter::SprayStarted(const FInputActionValue& Value)

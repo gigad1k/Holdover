@@ -120,3 +120,32 @@ via the `HoldoverEditor` MCP toolset. See Docs/CHANGELOG.md for the per-issue ev
 - [x] PROC-4 headless runner `Tools/run_tests.ps1` - 9/9 PASS exit 0 (2026-10-30).
 - [ ] **Manual listening/feel pass**: boom movement feel, hiss/spatialisation (P7-5), 2-4 player
       chaos check - Phase 7.6 playtests own these.
+
+## Phase 7.6 — find the fun (DES-1..DES-6, SIM-1..SIM-5)
+
+- [x] DES-1 staggered arrivals: `ArrivalDelay` + `bArrived` replicated, aircraft hidden until
+      arrival, dispatch announcement. Test: `Holdover.Treatment.SectionOwnership` (SIM-5).
+      **Not run — manual build required.**
+- [x] SIM-5 explicit section ownership: `OwningAircraft` on surface sections; radius-gather
+      respects explicit owners. **Not run — manual build required.**
+- [ ] **Manual (2-player)**: two aircraft with different `ArrivalDelay` values — confirm both
+      appear at the right times and have independent holdover clocks.
+- [x] DES-2 one-tank rule: single `FluidLevel` + `CarriedFluidType`; Q toggle removed; fluid
+      chosen at refill station. Test: `Holdover.Treatment.OneTankRefill`. **Not run.**
+- [x] DES-2 timed refills: `BeginRefill` starts `RefillDuration` (3s) countdown; not instant.
+      **Not run.**
+- [x] DES-2 PlayerState attribution: `AHoldoverPlayerState` with earnings/penalties/departures;
+      dispatcher names the player; results screen shows per-player lines.
+      Test: `Holdover.Treatment.PlayerStateAttribution`. **Not run.**
+- [ ] **Manual (2-player)**: one player carries Type I, the other Type IV — confirm the relay is
+      required (one can't do both). Confirm refill takes ~3s. Confirm results screen shows both
+      players' stats with names.
+- [ ] DES-2 one-tank relay forced: a solo player cannot clean AND protect without switching
+      at the station. **Manual verification required.**
+- [ ] SIM-1 weather reset/randomisation per shift.
+- [ ] SIM-2 holdover abort cost / degradation pause.
+- [ ] SIM-3 precipitation re-contaminates unprotected sections.
+- [ ] SIM-4 net pay = money - deductions; penalties can fail a shift.
+- [ ] DES-3 dispatcher line bank (60-100 reactive lines).
+- [ ] DES-4/DES-5 data assets (`AHoldoverShiftData`, `UHoldoverFluidData`).
+- [ ] DES-6 playtest gate: did anyone laugh unprompted; did players talk to coordinate.
