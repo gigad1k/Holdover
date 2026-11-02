@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 8a: wet/icy ground materials + painted taxi lines
+- `Tools/build_ramp_surface.py` (new): generated materials + decals, no purchased
+  textures. `M_ApronWet` (dark cold blue-grey, roughness 0.22 = wet apron) on the
+  ramp floor; `M_Ice` (bright cold white-blue, roughness 0.06 = glassy) on the
+  deicing pad and ice marker; `M_TaxiLine` (warm orange-yellow, faint emissive) as
+  5 deferred decals (centerline, stop line, pad edges, pad stop). All tagged
+  `builder:surface`; idempotent; READBACK verifies domain/blend/size/material.
+- UE 5.8 API notes (via `Tools/probe_mat_api.py`, `probe_mat_enums.py`,
+  `probe_decal_api.py`): material inputs need `connect_material_property()` with
+  `MaterialProperty.MP_BASE_COLOR` etc. (NOT `connect_material_expressions()`);
+  the decal domain is `MaterialDomain.MD_DEFERRED_DECAL` (not `MD_DECAL`);
+  `DecalComponent` uses `set_decal_material()`/`decal_material` (there is no
+  `set_material()` on it).
+- Tests: `run_tests.ps1` 7/7 pass (C++ unchanged).
+
 ## 2026-11-02 - Phase 8a: atmosphere pass (cold blue night, warm orange ramps)
 - `Tools/build_ramp_atmosphere.py` (new): snowy-night atmosphere for `L_RampGreybox`
   with no purchased assets. Cold steel-blue moonlight (intensity 3.0) + cool sky
