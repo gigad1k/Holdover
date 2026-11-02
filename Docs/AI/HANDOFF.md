@@ -80,6 +80,8 @@ sessions, #6 Steamworks.
     directly in tests (it works fine in the real PIE game path).
   - A test-side crash kills the rest of the run: the runner then reports every
     later test as MISSING and the log shows no "Automation Test Queue Empty".
+  - A bare spawned `AActor` has **no root component** — `GetActorLocation()`
+    silently returns (0,0,0). Give world-test owners a `USceneComponent` root.
 - **Unreal Python API names differ per build — probe before you code.** We built
   `Tools/probe_*.py` scripts for exactly this. Verified names in UE 5.8:
   - `MaterialEditingLibrary.connect_material_property(expr, "", MaterialProperty.MP_BASE_COLOR)`

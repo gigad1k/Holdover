@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 9 G-1: refill RPC bound to a real refill station
+- `UHoldoverSprayComponent::ServerBeginRefill` was client-callable with no
+  validation: any connection could start a timed refill anywhere, restart a
+  refill mid-progress, or push a garbage fluid enum into replicated state.
+- New `ValidateAndBeginRefill` (the RPC delegates to it): rejects invalid
+  `EHoldoverFluidType` values, rejects while a refill is in progress (no timer
+  refresh), and requires the owner to be within `RefillStationRange` (1000uu,
+  same slack as `ServerInteract`) of an `AHoldoverTestInteractable` refill
+  station. The legitimate station-interact path still passes unchanged.
+- New test `Holdover.MP.RefillGuard` (4 cases). Suite **22/22 PASS**.
+- Test-harness gotcha: a bare spawned `AActor` has no root component, so
+  `GetActorLocation()` silently returns (0,0,0) — world-test owners now get a
+  `USceneComponent` root.
+
 ## 2026-11-02 - Phase 9: PROC-1 world-based MP automation tests
 - `Source/Holdover/Tests/HoldoverWorldTests.cpp` (new): five world-based MP tests
   against real spawned actors in a real `UWorld`:

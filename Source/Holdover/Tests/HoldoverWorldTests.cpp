@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "Holdover.h"
@@ -12,6 +13,7 @@
 #include "HoldoverPlayerState.h"
 #include "HoldoverSprayComponent.h"
 #include "HoldoverSurfaceSection.h"
+#include "HoldoverTestInteractable.h"
 #include "Misc/AutomationTest.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/UnrealType.h"
@@ -52,13 +54,18 @@ namespace HoldoverWorldTest
 		return World->SpawnActor<T>(T::StaticClass(), FTransform(Location), Params);
 	}
 
-	// A spray-capable owner: plain actor + registered spray component. Replaces
-	// the abstract AHoldoverCharacter as the origin actor in world tests.
+	// A spray-capable owner: plain actor + root + registered spray component.
+	// Replaces the abstract AHoldoverCharacter as the origin actor in world tests.
+	// The root matters: a bare AActor has none and GetActorLocation() lies (0,0,0).
 	AActor* SpawnSprayOwner(UWorld* World, const FVector& Location, UHoldoverSprayComponent*& OutSpray)
 	{
 		AActor* Owner = Spawn<AActor>(World, Location);
 		if (Owner)
 		{
+			USceneComponent* Root = NewObject<USceneComponent>(Owner, TEXT("Root"));
+			Owner->SetRootComponent(Root);
+			Root->RegisterComponent();
+			Owner->SetActorLocation(Location);
 			OutSpray = NewObject<UHoldoverSprayComponent>(Owner, TEXT("Spray Component"));
 			OutSpray->RegisterComponent();
 		}
@@ -396,6 +403,71 @@ bool FHoldoverBoomValidationWorldTest::RunTest(const FString& Parameters)
 	Truck->ApplyBoomRequest(100000.f, 100000.f);
 	TestTrue(TEXT("Yaw within MaxAbsYaw"), FMath::Abs(Truck->BoomYaw) <= Truck->MaxAbsYaw + 0.01f);
 	TestTrue(TEXT("Extension within MaxExtension"), Truck->BoomExtension <= Truck->MaxExtension + 0.01f);
+
+	DestroyTestWorld(World);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// G-1 refill guard: the refill RPC is client-callable, so the server must
+// validate station proximity, the fluid enum and refill-in-progress itself.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverRefillGuardWorldTest,
+	"Holdover.MP.RefillGuard",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverRefillGuardWorldTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	AHoldoverTestInteractable* Station = Spawn<AHoldoverTestInteractable>(World, FVector(100.f, 0.f, 0.f));
+	UHoldoverSprayComponent* NearSpray = nullptr;
+	UHoldoverSprayComponent* FarSpray = nullptr;
+	UHoldoverSprayComponent* SecondNearSpray = nullptr;
+	AActor* NearOwner = SpawnSprayOwner(World, FVector::ZeroVector, NearSpray);
+	AActor* FarOwner = SpawnSprayOwner(World, FVector(5000.f, 0.f, 0.f), FarSpray);
+	AActor* SecondNearOwner = SpawnSprayOwner(World, FVector(200.f, 0.f, 0.f), SecondNearSpray);
+	if (!TestNotNull(TEXT("Station"), Station) || !TestNotNull(TEXT("Near owner"), NearOwner)
+		|| !TestNotNull(TEXT("Far owner"), FarOwner) || !TestNotNull(TEXT("Second near owner"), SecondNearOwner)
+		|| !TestNotNull(TEXT("Near spray"), NearSpray) || !TestNotNull(TEXT("Far spray"), FarSpray)
+		|| !TestNotNull(TEXT("Second near spray"), SecondNearSpray))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+
+	// At a station: refill starts (one-tank rule: type swaps, tank empties).
+	NearSpray->FluidLevel = 40.f;
+	TestTrue(TEXT("Refill at station accepted"), NearSpray->ValidateAndBeginRefill(EHoldoverFluidType::TypeIV));
+	TestTrue(TEXT("Refilling flag set"), NearSpray->IsRefilling());
+	TestEqual(TEXT("Fluid type swapped"), (int32)NearSpray->CarriedFluidType, (int32)EHoldoverFluidType::TypeIV);
+	TestEqual(TEXT("Tank emptied for refill"), NearSpray->FluidLevel, 0.f, 0.01f);
+	TestEqual(TEXT("Refill timer running"), NearSpray->GetRefillProgress(), 0.f, 0.01f);
+
+	// A second request mid-refill must not restart the timer.
+	TestFalse(TEXT("Double refill rejected"), NearSpray->ValidateAndBeginRefill(EHoldoverFluidType::TypeI));
+	TestEqual(TEXT("Refill timer untouched"), NearSpray->GetRefillProgress(), 0.f, 0.01f);
+	TestEqual(TEXT("Fluid type untouched"), (int32)NearSpray->CarriedFluidType, (int32)EHoldoverFluidType::TypeIV);
+
+	// Far from every station: rejected outright.
+	FarSpray->FluidLevel = 100.f;
+	TestFalse(TEXT("Refill away from station rejected"), FarSpray->ValidateAndBeginRefill(EHoldoverFluidType::TypeI));
+	TestFalse(TEXT("Not refilling"), FarSpray->IsRefilling());
+	TestEqual(TEXT("Tank untouched"), FarSpray->FluidLevel, 100.f, 0.01f);
+
+	// Garbage enum values never enter replicated state.
+	TestFalse(TEXT("Invalid fluid enum rejected"),
+		SecondNearSpray->ValidateAndBeginRefill(static_cast<EHoldoverFluidType>(7)));
+	TestFalse(TEXT("Not refilling after invalid enum"), SecondNearSpray->IsRefilling());
+
+	// The enum check must not block legitimate refills.
+	TestTrue(TEXT("Legitimate refill still accepted"), SecondNearSpray->ValidateAndBeginRefill(EHoldoverFluidType::TypeI));
 
 	DestroyTestWorld(World);
 	return true;

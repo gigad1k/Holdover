@@ -59,6 +59,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Spray")
 	float RefillDuration = 3.f;
 
+	/** G-1: server-side proximity to a refill station required to start a refill. */
+	UPROPERTY(EditDefaultsOnly, Category = "Spray")
+	float RefillStationRange = 1000.f;
+
 	/** Getters that prefer the data asset over local defaults. */
 	float GetSprayRange() const { return FluidData ? FluidData->SprayRange : SprayRange; }
 	float GetCleanRate() const { return FluidData ? FluidData->CleanRatePerSecond : CleanRatePerSecond; }
@@ -107,6 +111,14 @@ public:
 	 * instant RefillTanks. Server-authoritative; called from refill stations.
 	 */
 	void BeginRefill(EHoldoverFluidType NewType);
+
+	/**
+	 * Server-side handler for a refill request (G-1 validation lives here; the
+	 * ServerBeginRefill RPC delegates to this). Public so world-based automation
+	 * tests can exercise the exact validation path a remote client hits (PROC-1).
+	 * Returns true if the refill started.
+	 */
+	bool ValidateAndBeginRefill(EHoldoverFluidType NewType);
 
 	/** True while a timed refill is in progress. */
 	bool IsRefilling() const { return bRefilling; }

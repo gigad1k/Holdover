@@ -3,12 +3,14 @@
 #include "HoldoverSprayComponent.h"
 #include "Camera/CameraComponent.h"
 #include "Components/AudioComponent.h"
+#include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "Holdover.h"
 #include "HoldoverAudioLibrary.h"
 #include "HoldoverCharacter.h"
 #include "HoldoverSurfaceSection.h"
+#include "HoldoverTestInteractable.h"
 #include "Net/UnrealNetwork.h"
 
 UHoldoverSprayComponent::UHoldoverSprayComponent()
@@ -242,6 +244,48 @@ bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* T
 
 void UHoldoverSprayComponent::ServerBeginRefill_Implementation(EHoldoverFluidType NewType)
 {
+	ValidateAndBeginRefill(NewType);
+}
+
+bool UHoldoverSprayComponent::ValidateAndBeginRefill(EHoldoverFluidType NewType)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || !Owner->GetWorld())
+	{
+		return false;
+	}
+
+	// G-1: only two fluid types exist; a garbage enum must not enter replicated state.
+	if (NewType != EHoldoverFluidType::TypeI && NewType != EHoldoverFluidType::TypeIV)
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Refill rejected (invalid fluid type): %s"), *GetNameSafe(Owner));
+		return false;
+	}
+
+	// G-1: a refill in progress cannot be restarted (would refresh the tank early).
+	if (bRefilling)
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Refill rejected (already refilling): %s"), *GetNameSafe(Owner));
+		return false;
+	}
+
+	// G-1: the RPC is client-callable, so station proximity is validated here,
+	// not only on the interact path. Same slack as ServerInteract's range check.
+	bool bNearStation = false;
+	for (TActorIterator<AHoldoverTestInteractable> It(Owner->GetWorld()); It; ++It)
+	{
+		if (FVector::DistSquared(Owner->GetActorLocation(), It->GetActorLocation()) <= FMath::Square(RefillStationRange))
+		{
+			bNearStation = true;
+			break;
+		}
+	}
+	if (!bNearStation)
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Refill rejected (not at a refill station): %s"), *GetNameSafe(Owner));
+		return false;
+	}
+
 	// DES-2: one-tank rule — choosing a fluid at the station replaces whatever
 	// you were carrying. The refill takes RefillDuration seconds.
 	const float Duration = GetRefillDuration();
@@ -250,9 +294,10 @@ void UHoldoverSprayComponent::ServerBeginRefill_Implementation(EHoldoverFluidTyp
 	bRefilling = true;
 	RefillTimeRemaining = Duration;
 	UE_LOG(LogHoldover, Display, TEXT("Refill started (%s) -> %s, %.1fs"),
-		*GetNameSafe(GetOwner()),
+		*GetNameSafe(Owner),
 		NewType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV"),
 		Duration);
+	return true;
 }
 
 void UHoldoverSprayComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
