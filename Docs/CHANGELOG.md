@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-11-02 - READY FOR ALI: consolidated NEEDS_ALI + status
+- `Docs/AI/NEEDS_ALI.md` rewritten as ONE prioritised list: 9 items (packaged
+  full shift, DES-6 gate, 3-4p MP, field-manual placeholders, legal review,
+  atmosphere, snow Niagara, art assets, Steamworks) each with exact steps,
+  estimated minutes and the AI's follow-up. ~5 h total; 1-5 are the
+  demo-critical path.
+- `Docs/AI/STATUS.md` now opens **READY FOR ALI** with a 10-line summary.
+- Legal DRAFT label landed in the previous commit (test-enforced).
+
 ## 2026-11-02 - Phase 10: legal text labelled DRAFT (not final)
 - `HoldoverInfoContent.cpp` `LegalText()` now leads with
   **"DRAFT - not legal advice, needs Ali/lawyer review"** — the legal block is a
