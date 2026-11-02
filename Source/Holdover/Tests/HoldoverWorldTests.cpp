@@ -16,6 +16,8 @@
 #include "HoldoverSurfaceSection.h"
 #include "HoldoverTestInteractable.h"
 #include "Misc/AutomationTest.h"
+#include "Misc/FileHelper.h"
+#include "Misc/Paths.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/UnrealType.h"
 
@@ -183,6 +185,11 @@ bool FHoldoverReplicationContractTest::RunTest(const FString& Parameters)
 	TestReplicatedProperty(*this, GS, TEXT("LastShiftDuration"));
 	TestReplicatedProperty(*this, GS, TEXT("PayPerOnTimeDeparture"));
 	TestReplicatedProperty(*this, GS, TEXT("LateDepartureDeduction"));
+	// Sonnet H1: shift number + company ledger must reach clients.
+	TestReplicatedProperty(*this, GS, TEXT("ShiftNumber"));
+	TestReplicatedProperty(*this, GS, TEXT("TotalCompanyPay"));
+	TestReplicatedProperty(*this, GS, TEXT("TotalCompanyDeductions"));
+	TestReplicatedProperty(*this, GS, TEXT("CompanyLedger"));
 
 	// Per-player attribution.
 	TestReplicatedProperty(*this, PS, TEXT("Earnings"));
@@ -573,6 +580,140 @@ bool FHoldoverLineOfSightWorldTest::RunTest(const FString& Parameters)
 		AHoldoverCharacter::ValidateInteractTarget(Caller, NearTarget, 1000.f));
 
 	DestroyTestWorld(World);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Sonnet H2/M17: arrival visuals are derived from the replicated flags only.
+// Clients never write bArrived/bDeparted; SyncArrivalVisuals is exactly the
+// client-side BeginPlay path, so this covers the "replication applied before
+// BeginPlay" late-joiner ordering that used to leave aircraft hidden forever.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverArrivalVisualsWorldTest,
+	"Holdover.MP.ArrivalVisuals",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverArrivalVisualsWorldTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	AHoldoverAircraft* Aircraft = Spawn<AHoldoverAircraft>(World, FVector::ZeroVector);
+	AHoldoverSurfaceSection* Section = Spawn<AHoldoverSurfaceSection>(World, FVector(300.f, 0.f, 0.f));
+	if (!TestNotNull(TEXT("Aircraft"), Aircraft) || !TestNotNull(TEXT("Section"), Section))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	Aircraft->RegisterSection(Section);
+
+	// Not arrived: everything hidden and collision-less.
+	Aircraft->bArrived = false;
+	Aircraft->bDeparted = false;
+	Aircraft->SyncArrivalVisuals();
+	TestTrue(TEXT("aircraft hidden before arrival"), Aircraft->IsHidden());
+	TestTrue(TEXT("section hidden before arrival"), Section->IsHidden());
+
+	// Replicated arrival (the late-joiner case): the client-side BeginPlay path
+	// is SyncArrivalVisuals - it must show the aircraft AND its sections and
+	// must not write the replicated flags back.
+	Aircraft->bArrived = true;
+	Aircraft->SyncArrivalVisuals();
+	TestFalse(TEXT("aircraft visible after replicated arrival"), Aircraft->IsHidden());
+	TestFalse(TEXT("section visible after replicated arrival"), Section->IsHidden());
+	TestTrue(TEXT("bArrived untouched by client path"), Aircraft->bArrived);
+
+	// Departed: the plane stays visible for the climb-out cue, but its
+	// unattached sections must not be left behind, visible and sprayable.
+	Aircraft->bDeparted = true;
+	Aircraft->SyncArrivalVisuals();
+	TestFalse(TEXT("departed aircraft stays visible for climb-out"), Aircraft->IsHidden());
+	TestTrue(TEXT("departed sections hidden"), Section->IsHidden());
+	TestTrue(TEXT("bDeparted untouched by client path"), Aircraft->bDeparted);
+
+	DestroyTestWorld(World);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Sonnet H1 test gap: the contract test above cannot see DOREPLIFETIME
+// registration (enumerating GetLifetimeReplicatedProps asserts in UE 5.8
+// automation - see the note in this file's header). This lint closes the hole
+// mechanically: every property the contract expects must have a real
+// `DOREPLIFETIME(<Class>, <Prop>)` line in the class's .cpp.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverReplicationLintTest,
+	"Holdover.MP.ReplicationLint",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverReplicationLintTest::RunTest(const FString& Parameters)
+{
+	struct FEntry { const TCHAR* Cpp; const TCHAR* Cls; const TCHAR* Prop; };
+	static const FEntry Entries[] = {
+		{ TEXT("HoldoverCharacter.cpp"),        TEXT("AHoldoverCharacter"),        TEXT("SpeedScale") },
+		{ TEXT("HoldoverCharacter.cpp"),        TEXT("AHoldoverCharacter"),        TEXT("bVehicleHidden") },
+		{ TEXT("HoldoverSprayComponent.cpp"),   TEXT("UHoldoverSprayComponent"),   TEXT("FluidLevel") },
+		{ TEXT("HoldoverSprayComponent.cpp"),   TEXT("UHoldoverSprayComponent"),   TEXT("CarriedFluidType") },
+		{ TEXT("HoldoverSprayComponent.cpp"),   TEXT("UHoldoverSprayComponent"),   TEXT("bRefilling") },
+		{ TEXT("HoldoverSprayComponent.cpp"),   TEXT("UHoldoverSprayComponent"),   TEXT("RefillTimeRemaining") },
+		{ TEXT("HoldoverDeicingTruck.cpp"),     TEXT("AHoldoverDeicingTruck"),     TEXT("OccupantCharacter") },
+		{ TEXT("HoldoverDeicingTruck.cpp"),     TEXT("AHoldoverDeicingTruck"),     TEXT("BoomYaw") },
+		{ TEXT("HoldoverDeicingTruck.cpp"),     TEXT("AHoldoverDeicingTruck"),     TEXT("BoomExtension") },
+		{ TEXT("HoldoverAircraft.cpp"),         TEXT("AHoldoverAircraft"),         TEXT("bDeparted") },
+		{ TEXT("HoldoverAircraft.cpp"),         TEXT("AHoldoverAircraft"),         TEXT("bArrived") },
+		{ TEXT("HoldoverAircraft.cpp"),         TEXT("AHoldoverAircraft"),         TEXT("HoldoverState") },
+		{ TEXT("HoldoverAircraft.cpp"),         TEXT("AHoldoverAircraft"),         TEXT("HoldoverRemaining") },
+		{ TEXT("HoldoverSurfaceSection.cpp"),   TEXT("AHoldoverSurfaceSection"),   TEXT("CleanlinessPercent") },
+		{ TEXT("HoldoverSurfaceSection.cpp"),   TEXT("AHoldoverSurfaceSection"),   TEXT("ProtectionPercent") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("WeatherSeverity") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("ShiftState") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("ShiftTimeRemaining") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("Quota") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("OnTimeDepartures") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("LateDepartures") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("Money") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("Deductions") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("bShiftPassed") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("DispatchFeed") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("LastShiftDuration") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("PayPerOnTimeDeparture") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("LateDepartureDeduction") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("ShiftNumber") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("TotalCompanyPay") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("TotalCompanyDeductions") },
+		{ TEXT("HoldoverGameState.cpp"),        TEXT("AHoldoverGameState"),        TEXT("CompanyLedger") },
+		{ TEXT("HoldoverPlayerState.cpp"),      TEXT("AHoldoverPlayerState"),      TEXT("Earnings") },
+		{ TEXT("HoldoverPlayerState.cpp"),      TEXT("AHoldoverPlayerState"),      TEXT("Penalties") },
+		{ TEXT("HoldoverPlayerState.cpp"),      TEXT("AHoldoverPlayerState"),      TEXT("DeparturesHandled") },
+		{ TEXT("HoldoverPlayerState.cpp"),      TEXT("AHoldoverPlayerState"),      TEXT("CarriedFluidType") },
+	};
+
+	TMap<FString, FString> FileCache;
+	for (const FEntry& E : Entries)
+	{
+		FString* Cached = FileCache.Find(E.Cpp);
+		if (!Cached)
+		{
+			const FString Path = FPaths::Combine(FPaths::ProjectDir(), TEXT("Source/Holdover"), E.Cpp);
+			FString Text;
+			if (!FFileHelper::LoadFileToString(Text, *Path))
+			{
+				AddError(*FString::Printf(TEXT("cannot read %s for the registration lint"), *Path));
+				continue;
+			}
+			Cached = &FileCache.Add(E.Cpp, MoveTemp(Text));
+		}
+		// Accept both DOREPLIFETIME(Cls, Prop) and DOREPLIFETIME_CONDITION(Cls, Prop, ...).
+		const FString NeedlePlain = FString::Printf(TEXT("DOREPLIFETIME(%s, %s"), E.Cls, E.Prop);
+		const FString NeedleCond = FString::Printf(TEXT("DOREPLIFETIME_CONDITION(%s, %s"), E.Cls, E.Prop);
+		TestTrue(*FString::Printf(TEXT("%s registers %s"), E.Cls, E.Prop),
+			Cached->Contains(NeedlePlain) || Cached->Contains(NeedleCond));
+	}
 	return true;
 }
 

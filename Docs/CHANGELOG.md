@@ -1,5 +1,27 @@
 # CHANGELOG
 
+## 2026-11-02 - Sonnet review H1/H2 + M17: client-truth fixes
+- **H1 (verified real):** `ShiftNumber`, `TotalCompanyPay`,
+  `TotalCompanyDeductions`, `CompanyLedger` were `UPROPERTY(ReplicatedUsing)`
+  but had **no DOREPLIFETIME** — clients kept defaults (SHIFT 1 / ledger $0
+  forever, wrong profile name, field-manual auto-open never triggering).
+  Registered in `GetLifetimeReplicatedProps`; added to the replication contract.
+- **H2 (verified real):** `AHoldoverAircraft::BeginPlay` wrote replicated
+  `bArrived` and hid the actor with no authority guard — a client whose initial
+  replication lands before BeginPlay stayed hidden all shift. Arrival init is
+  now authority-only; clients derive visuals through the new public
+  `SyncArrivalVisuals()` (also called from `OnRep_Arrived`).
+- **M17 (cheap half):** `SyncArrivalVisuals` also drives the unattached surface
+  sections' hidden/collision from `bArrived`/`bDeparted` (departed sections no
+  longer stay visible and sprayable; the departed plane stays visible for its
+  climb-out cue).
+- **Test gap closed mechanically:** `Holdover.MP.ReplicationLint` reads each
+  class's .cpp and asserts every contract property has a real
+  `DOREPLIFETIME[_CONDITION](<Class>, <Prop>` line — this is the H1-class hole
+  the CPF_Net-only contract test could not see. Plus
+  `Holdover.MP.ArrivalVisuals` for the H2 client path.
+- Tests: `run_tests.ps1` **28/28 pass**.
+
 ## 2026-11-02 - READY FOR ALI: consolidated NEEDS_ALI + status
 - `Docs/AI/NEEDS_ALI.md` rewritten as ONE prioritised list: 9 items (packaged
   full shift, DES-6 gate, 3-4p MP, field-manual placeholders, legal review,

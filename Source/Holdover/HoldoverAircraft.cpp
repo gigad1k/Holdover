@@ -90,6 +90,7 @@ bool AHoldoverAircraft::TryDepart()
 	}
 	bDeparted = true;
 	HoldoverState = EHoldoverState::Departed;
+	SyncArrivalVisuals();
 	return true;
 }
 
@@ -101,8 +102,7 @@ void AHoldoverAircraft::ResetForNewShift()
 	HoldoverState = EHoldoverState::Incomplete;
 	HoldoverRemaining = 0.f;
 	SetActorLocation(SpawnLocation);
-	SetActorHiddenInGame(!bArrived);
-	SetActorEnableCollision(bArrived);
+	SyncArrivalVisuals();
 	for (AHoldoverSurfaceSection* Section : Sections)
 	{
 		if (Section)
@@ -130,13 +130,15 @@ void AHoldoverAircraft::BeginPlay()
 
 	SpawnLocation = GetActorLocation();
 
-	// DES-1: staggered arrivals. A delayed aircraft is parked offscreen until it arrives.
-	bArrived = ArrivalDelay <= 0.f;
-	if (!bArrived)
+	// H2: only the authority initialises the replicated arrival flag. Clients
+	// must not write it (doing so raced the initial replication and left late
+	// joiners with a permanently hidden aircraft); they re-derive visuals from
+	// the replicated value instead.
+	if (HasAuthority())
 	{
-		SetActorHiddenInGame(true);
-		SetActorEnableCollision(false);
+		bArrived = ArrivalDelay <= 0.f;
 	}
+	SyncArrivalVisuals();
 
 	// SIM-5: radius-gather only claims sections with no explicit owner.
 	for (TActorIterator<AHoldoverSurfaceSection> It(GetWorld()); It; ++It)
@@ -152,6 +154,25 @@ void AHoldoverAircraft::BeginPlay()
 
 	UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' registered %d surface sections (arrival delay %.1fs)"),
 		*GetName(), Sections.Num(), ArrivalDelay);
+}
+
+void AHoldoverAircraft::SyncArrivalVisuals()
+{
+	// Aircraft visibility follows arrival; a departed plane stays visible so its
+	// climb-out cue can play. Sonnet M17: the sections are separate actors that
+	// do not follow the aircraft — hide them together with arrival/departure so
+	// nothing is left floating, visible and sprayable behind.
+	SetActorHiddenInGame(!bArrived);
+	SetActorEnableCollision(bArrived);
+	const bool bShowSections = bArrived && !bDeparted;
+	for (AHoldoverSurfaceSection* Section : Sections)
+	{
+		if (Section)
+		{
+			Section->SetActorHiddenInGame(!bShowSections);
+			Section->SetActorEnableCollision(bShowSections);
+		}
+	}
 }
 
 void AHoldoverAircraft::Tick(float DeltaSeconds)
@@ -178,8 +199,7 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 		if (Elapsed >= ArrivalDelay)
 		{
 			bArrived = true;
-			SetActorHiddenInGame(false);
-			SetActorEnableCollision(true);
+			SyncArrivalVisuals();
 			ArrivalTime = GetWorld()->GetTimeSeconds();
 			UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' has ARRIVED"), *GetName());
 			if (AHoldoverGameState* GSW = GetWorld()->GetGameState<AHoldoverGameState>())
@@ -397,6 +417,5 @@ void AHoldoverAircraft::OnRep_Holdover()
 
 void AHoldoverAircraft::OnRep_Arrived()
 {
-	SetActorHiddenInGame(!bArrived);
-	SetActorEnableCollision(bArrived);
+	SyncArrivalVisuals();
 }

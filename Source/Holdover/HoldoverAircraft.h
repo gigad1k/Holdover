@@ -109,6 +109,13 @@ public:
 	/** Resets treatment state and position for a new shift (server). */
 	void ResetForNewShift();
 
+	/**
+	 * Sonnet H2: arrival (and its sections') visibility is derived from the
+	 * replicated bArrived/bDeparted flags only. Called from BeginPlay (client
+	 * path) and OnRep_Arrived — clients never write the flags themselves.
+	 */
+	void SyncArrivalVisuals();
+
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Holdover")
 	bool bDeparted = false;
 

@@ -291,6 +291,12 @@ void AHoldoverGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(AHoldoverGameState, LastShiftDuration);
 	DOREPLIFETIME(AHoldoverGameState, PayPerOnTimeDeparture);
 	DOREPLIFETIME(AHoldoverGameState, LateDepartureDeduction);
+	// Sonnet H1: these are UPROPERTY(ReplicatedUsing) and were never registered,
+	// so clients kept the defaults (SHIFT 1 / ledger $0 forever).
+	DOREPLIFETIME(AHoldoverGameState, ShiftNumber);
+	DOREPLIFETIME(AHoldoverGameState, TotalCompanyPay);
+	DOREPLIFETIME(AHoldoverGameState, TotalCompanyDeductions);
+	DOREPLIFETIME(AHoldoverGameState, CompanyLedger);
 }
 
 void AHoldoverGameState::OnRep_Shift()
