@@ -53,6 +53,10 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Boom")
 	float ExtensionSpeed = 300.f;
 
+	/** G-2: token-bucket burst — seconds of motion one request may cover. */
+	UPROPERTY(EditDefaultsOnly, Category = "Boom")
+	float BoomBurstSeconds = 0.25f;
+
 	/** Arcade driving is modular: keep false for the parked-truck demo. */
 	UPROPERTY(EditDefaultsOnly, Category = "Driving")
 	bool bDrivingEnabled = false;
@@ -65,11 +69,12 @@ public:
 	void SetBoom(float InYaw, float InExtension);
 
 	/**
-	 * Server-side handler for a boom request (MP-7 rate validation lives here;
-	 * the ServerSetBoom RPC delegates to this). Public so world-based automation
-	 * tests can exercise the exact validation path a remote client hits (PROC-1).
+	 * Server-side handler for a boom request (MP-7/G-2 rate validation lives
+	 * here; the ServerSetBoom RPC delegates to this). Public so world-based
+	 * automation tests can exercise the exact validation path a remote client
+	 * hits (PROC-1). `NowSeconds` < 0 uses world time (tests inject their own).
 	 */
-	void ApplyBoomRequest(float InYaw, float InExtension);
+	void ApplyBoomRequest(float InYaw, float InExtension, double NowSeconds = -1.0);
 
 	// --- occupancy ---
 	UFUNCTION(BlueprintCallable, Category = "Occupancy")
@@ -99,6 +104,11 @@ protected:
 
 	/** MP-9: mapping-context removal on possession end. */
 	void RemoveTruckInputContext();
+
+	// G-2: server-side token bucket for boom rate validation (not replicated).
+	float BoomYawAllowance = 0.f;
+	float BoomExtAllowance = 0.f;
+	double LastBoomRateTime = -1.0;
 
 	UPROPERTY(Transient)
 	class UInputMappingContext* TruckContext;

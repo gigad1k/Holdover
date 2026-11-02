@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 9 G-2: boom rate limit is per elapsed time, not per RPC
+- `ApplyBoomRequest` (behind `ServerSetBoom`) now runs a server-side **token
+  bucket**: the boom moves at most `YawSpeed`/`ExtensionSpeed` per second of
+  elapsed server time, banking up to `BoomBurstSeconds` (0.25s) for packet
+  bursts. The old per-RPC clamp allowed ~60x overspeed under a 60Hz request
+  flood; teleports and floods now drain the bucket and stop.
+- `ApplyBoomRequest` takes an injectable `NowSeconds` (default = world time) so
+  the rate logic is deterministically testable.
+- `Holdover.MP.BoomValidation` extended: burst cap, same-frame 100-request flood
+  moves nothing, refill-then-reverse symmetric clamp. Suite **22/22 PASS**.
+
 ## 2026-11-02 - Phase 9 G-1: refill RPC bound to a real refill station
 - `UHoldoverSprayComponent::ServerBeginRefill` was client-callable with no
   validation: any connection could start a timed refill anywhere, restart a

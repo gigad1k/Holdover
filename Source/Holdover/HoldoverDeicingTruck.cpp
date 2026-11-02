@@ -247,13 +247,36 @@ void AHoldoverDeicingTruck::ServerSetBoom_Implementation(float InYaw, float InEx
 	ApplyBoomRequest(InYaw, InExtension);
 }
 
-void AHoldoverDeicingTruck::ApplyBoomRequest(float InYaw, float InExtension)
+void AHoldoverDeicingTruck::ApplyBoomRequest(float InYaw, float InExtension, double NowSeconds)
 {
-	// MP-7: validate movement rate — clamp each request to one second of possible
-	// motion from the server's current state (tolerates lag bursts, rejects teleports).
-	const float Yaw = BoomYaw + FMath::Clamp(InYaw - BoomYaw, -YawSpeed, YawSpeed);
-	const float Ext = BoomExtension + FMath::Clamp(InExtension - BoomExtension, -ExtensionSpeed, ExtensionSpeed);
-	SetBoom(Yaw, Ext);
+	// G-2: token-bucket rate limit — the boom moves at most YawSpeed/
+	// ExtensionSpeed per second of ELAPSED server time, with up to
+	// BoomBurstSeconds of motion banked for packet bursts. A same-frame RPC
+	// flood (120 unreliable requests/sec) cannot overspeed it; teleports stay
+	// rejected (MP-7).
+	const double Now = NowSeconds >= 0.0
+		? NowSeconds
+		: (GetWorld() ? (double)GetWorld()->GetTimeSeconds() : 0.0);
+	const float BurstYaw = YawSpeed * BoomBurstSeconds;
+	const float BurstExt = ExtensionSpeed * BoomBurstSeconds;
+	if (LastBoomRateTime < 0.0)
+	{
+		BoomYawAllowance = BurstYaw;
+		BoomExtAllowance = BurstExt;
+	}
+	else
+	{
+		const float Dt = (float)FMath::Clamp<double>(Now - LastBoomRateTime, 0.0, (double)BoomBurstSeconds);
+		BoomYawAllowance = FMath::Min(BoomYawAllowance + YawSpeed * Dt, BurstYaw);
+		BoomExtAllowance = FMath::Min(BoomExtAllowance + ExtensionSpeed * Dt, BurstExt);
+	}
+	LastBoomRateTime = Now;
+
+	const float YawDelta = FMath::Clamp(InYaw - BoomYaw, -BoomYawAllowance, BoomYawAllowance);
+	const float ExtDelta = FMath::Clamp(InExtension - BoomExtension, -BoomExtAllowance, BoomExtAllowance);
+	BoomYawAllowance -= FMath::Abs(YawDelta);
+	BoomExtAllowance -= FMath::Abs(ExtDelta);
+	SetBoom(BoomYaw + YawDelta, BoomExtension + ExtDelta);
 }
 
 void AHoldoverDeicingTruck::OnRep_Boom()

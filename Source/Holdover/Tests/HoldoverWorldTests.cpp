@@ -387,20 +387,38 @@ bool FHoldoverBoomValidationWorldTest::RunTest(const FString& Parameters)
 		return false;
 	}
 
-	// Teleport attempt (yaw 999, extension 9999) is clamped to one second of
-	// motion from the server's current state.
-	Truck->ApplyBoomRequest(999.f, 9999.f);
-	TestEqual(TEXT("Yaw clamped to one second of motion"), Truck->BoomYaw, Truck->YawSpeed, 0.01f);
-	TestEqual(TEXT("Extension clamped to one second of motion"), Truck->BoomExtension,
-		400.f + Truck->ExtensionSpeed, 0.01f);
+	// G-2 token bucket: a teleport request may only cover BoomBurstSeconds of
+	// motion (0.25s * 60 deg/s = 15 deg yaw, 0.25s * 300 uu/s = 75 uu extension).
+	const float BurstYaw = Truck->YawSpeed * Truck->BoomBurstSeconds;
+	const float BurstExt = Truck->ExtensionSpeed * Truck->BoomBurstSeconds;
 
-	// Reverse teleport attempt is clamped symmetrically.
-	Truck->ApplyBoomRequest(-999.f, -9999.f);
+	Truck->ApplyBoomRequest(999.f, 9999.f, 0.0);
+	TestEqual(TEXT("Yaw clamped to one burst of motion"), Truck->BoomYaw, BurstYaw, 0.01f);
+	TestEqual(TEXT("Extension clamped to one burst of motion"), Truck->BoomExtension, 400.f + BurstExt, 0.01f);
+
+	// A same-frame RPC flood cannot overspeed the boom.
+	for (int32 i = 0; i < 100; ++i)
+	{
+		Truck->ApplyBoomRequest(999.f, 9999.f, 0.0);
+	}
+	TestEqual(TEXT("Yaw unchanged by same-frame flood"), Truck->BoomYaw, BurstYaw, 0.01f);
+	TestEqual(TEXT("Extension unchanged by same-frame flood"), Truck->BoomExtension, 400.f + BurstExt, 0.01f);
+
+	// After idle time the bucket refills to one burst — reverse teleport is
+	// clamped symmetrically (and can never overshoot the absolute clamps).
+	Truck->ApplyBoomRequest(-999.f, -9999.f, 10.0);
 	TestEqual(TEXT("Yaw clamped back"), Truck->BoomYaw, 0.f, 0.01f);
 	TestEqual(TEXT("Extension clamped back"), Truck->BoomExtension, 400.f, 0.01f);
 
+	for (int32 i = 0; i < 100; ++i)
+	{
+		Truck->ApplyBoomRequest(-999.f, -9999.f, 10.0);
+	}
+	TestEqual(TEXT("Yaw unchanged by reverse flood"), Truck->BoomYaw, 0.f, 0.01f);
+	TestEqual(TEXT("Extension unchanged by reverse flood"), Truck->BoomExtension, 400.f, 0.01f);
+
 	// Absolute clamps still apply at the edges.
-	Truck->ApplyBoomRequest(100000.f, 100000.f);
+	Truck->ApplyBoomRequest(100000.f, 100000.f, 100.0);
 	TestTrue(TEXT("Yaw within MaxAbsYaw"), FMath::Abs(Truck->BoomYaw) <= Truck->MaxAbsYaw + 0.01f);
 	TestTrue(TEXT("Extension within MaxExtension"), Truck->BoomExtension <= Truck->MaxExtension + 0.01f);
 
