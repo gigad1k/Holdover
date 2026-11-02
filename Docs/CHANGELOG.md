@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-11-02 - Sonnet review Mediums: test-runner + smoke-gate hardening
+- **M15 (`Tools/run_tests.ps1`):** the expected list held 7 of 31 names, so a
+  deleted/renamed test outside it passed silently. Now lists all 31 (a new test
+  must be added there), asserts the engine performed at least the expected count
+  (catches cut-short runs), defaults `$UEPath` to the real UE 5.8 install (the
+  `D:\Gamez` default never existed), and throws instead of falling back to a
+  hardcoded `D:\Projects` path. Verified: 31/31 expected-pass.
+- **M16 (`Tools/package_win64.ps1`):** the smoke gate now picks the real game
+  binary (`Holdover\Binaries\Win64\Holdover.exe`, not whichever stub is found
+  first), kills the whole process tree (`taskkill /T`), requires positive
+  evidence (`LoadMap: L_RampGreybox` + `Field manual built`) so a hang before
+  the map cannot pass, and fails on `PLACEHOLDER AUDIO MISSING` /
+  `LogLinker: Error` / early non-zero exit. Verified: strict gate PASS.
+
 ## 2026-11-02 - Sonnet review Mediums: cheap fixes batch
 - **M2:** server LOS traces now ignore the target's sibling surface panels
   (spray + interact) — a panel behind its own aircraft's other panels (tail
