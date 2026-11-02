@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 9 G-5: late-join shift state fully replicated
+- `AHoldoverGameState`: `LastShiftDuration`, `PayPerOnTimeDeparture` and
+  `LateDepartureDeduction` are now replicated. A late joiner previously read the
+  local 120s default for elapsed-time math and C++-default pay rules for the HUD.
+- ReplicationContract extended to cover the three properties. Suite **23/23 PASS**.
+- **Phase 9 hardening complete**: audit gaps G-1..G-5 all fixed, each with
+  automation coverage (`Docs/MP_AUDIT_2026-11-02.md` backlog closed).
+
 ## 2026-11-02 - Phase 9 G-3/G-4: server line-of-sight re-trace on spray + interact
 - `ServerApplySprayRequest` (G-3) and `ServerInteract` (G-4) now re-trace
   `ECC_Visibility` from the validated origin to the target on the server and

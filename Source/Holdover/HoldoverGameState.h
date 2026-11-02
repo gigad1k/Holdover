@@ -103,10 +103,11 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Shift")
 	bool bShiftPassed = false;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Shift")
+	/** G-5: replicated so late joiners and clients show the same pay rules. */
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Shift")
 	int32 PayPerOnTimeDeparture = 100;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Shift")
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Shift")
 	int32 LateDepartureDeduction = 50;
 
 	// --- dispatcher feed ---
@@ -153,6 +154,9 @@ protected:
 	UFUNCTION()
 	void OnRep_Dispatch();
 
+	/** G-5: replicated — a late joiner computing elapsed = duration - remaining
+	 *  must read the real duration, not the local default. */
+	UPROPERTY(Replicated)
 	float LastShiftDuration = 120.f;
 
 	/** DES-3: per-event repetition counters for the dispatcher line bank. */

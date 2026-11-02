@@ -179,6 +179,10 @@ bool FHoldoverReplicationContractTest::RunTest(const FString& Parameters)
 	TestReplicatedProperty(*this, GS, TEXT("Deductions"));
 	TestReplicatedProperty(*this, GS, TEXT("bShiftPassed"));
 	TestReplicatedProperty(*this, GS, TEXT("DispatchFeed"));
+	// G-5: late joiners must see the real duration and pay rules.
+	TestReplicatedProperty(*this, GS, TEXT("LastShiftDuration"));
+	TestReplicatedProperty(*this, GS, TEXT("PayPerOnTimeDeparture"));
+	TestReplicatedProperty(*this, GS, TEXT("LateDepartureDeduction"));
 
 	// Per-player attribution.
 	TestReplicatedProperty(*this, PS, TEXT("Earnings"));

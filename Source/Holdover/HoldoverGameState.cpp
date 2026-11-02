@@ -287,6 +287,10 @@ void AHoldoverGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(AHoldoverGameState, Deductions);
 	DOREPLIFETIME(AHoldoverGameState, bShiftPassed);
 	DOREPLIFETIME(AHoldoverGameState, DispatchFeed);
+	// G-5: late-join correctness — duration and pay rules must match the host.
+	DOREPLIFETIME(AHoldoverGameState, LastShiftDuration);
+	DOREPLIFETIME(AHoldoverGameState, PayPerOnTimeDeparture);
+	DOREPLIFETIME(AHoldoverGameState, LateDepartureDeduction);
 }
 
 void AHoldoverGameState::OnRep_Shift()
