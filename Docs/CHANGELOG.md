@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 8a: atmosphere pass (cold blue night, warm orange ramps)
+- `Tools/build_ramp_atmosphere.py` (new): snowy-night atmosphere for `L_RampGreybox`
+  with no purchased assets. Cold steel-blue moonlight (intensity 3.0) + cool sky
+  ambient (0.8) + cold blue-grey volumetric height fog (density 0.03) + four warm
+  sodium-orange spot pools (9000cd) under the ramp light poles + mild post-process
+  (bloom 0.75, vignette 0.28, AO 0.55, auto-exposure 0.55-1.85, slight cool
+  desaturation). All tagged `builder:atmosphere`; idempotent.
+- Every run ends with a READBACK block proving each value persisted (headless, so
+  the render cannot be seen - see Docs/AI/NEEDS_ALI.md for the eyeball pass).
+- UE 5.8 API notes (found via `Tools/probe_atmo_names.py` / `probe_pp_names.py`):
+  PostProcessVolume keeps `Settings`/`Unbound`/`BlendRadius` on the actor (no
+  `PostProcessComponent`); override flags are `override_<name>`; `ColorSaturation`
+  and `ColorContrast` are `FVector4` not `FLinearColor`; fog volumetric toggle is
+  `enable_volumetric_fog` and fog colours go through `set_*_inscattering_color()`.
+- Tests: `run_tests.ps1` 7/7 pass (C++ unchanged).
+
 ## 2026-11-02 - Phase 8a: PROC-5 builder actor-ownership model
 - `Tools/mapbuild_common.py` (new): shared ownership helpers. Builders tag their
   actors `builder:<name>` and clear **only** their own, so hand-placed / Phase 8
