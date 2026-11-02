@@ -1,5 +1,11 @@
 # CHANGELOG
 
+## 2026-10-31 — Phase 7.6: DES-6 playtest session script
+- `Docs/DES6_PLAYTEST_SESSION.md`: complete 2-player playtest script — session setup, pre-
+  session brief, 22-item observation checklist across 3 shifts, DES-6 gate questions
+  (laughter + coordination), post-session interview, results template, evidence capture plan.
+  Ready to run. Gate must pass before Phase 8 art pass.
+
 ## 2026-10-31 — Phase 7.6: DES-4 escalating shift profiles + running ledger
 - `HoldoverShiftProfiles.h/cpp`: 5 built-in escalating profiles (Night 1 Orientation ->
   Night 5 Blizzard). Weather severity, holdover duration, deadlines, contamination and pay

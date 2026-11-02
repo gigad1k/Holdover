@@ -164,3 +164,5 @@ via the `HoldoverEditor` MCP toolset. See Docs/CHANGELOG.md for the per-issue ev
 - [ ] **Manual**: play 3+ shifts in sequence — confirm difficulty escalates (weather,
       deadlines, quota), ledger accumulates, profile name shows on HUD.
 - [ ] DES-6 playtest gate: did anyone laugh unprompted; did players talk to coordinate.
+      **Session script: `Docs/DES6_PLAYTEST_SESSION.md`** — run the 2-player session and
+      record results in the template. Do not begin Phase 8 art until this gate passes.
