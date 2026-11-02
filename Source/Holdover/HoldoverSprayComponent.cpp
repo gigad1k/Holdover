@@ -203,7 +203,7 @@ void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection
 	ServerApplySprayRequest(Target, DeltaSeconds);
 }
 
-bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* Target, float DeltaSeconds)
+bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* Target, float DeltaSeconds, double NowSeconds)
 {
 	AActor* Owner = GetOwner();
 	if (!Owner || !IsValid(Target))
@@ -251,7 +251,30 @@ bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* T
 		return false;
 	}
 
-	return ApplySpray(Target, Dt);
+	// Sonnet M1: token bucket — spray time accrues at 1x real time, banked up to
+	// 2x the request interval. dt is already clamped per request; this bounds
+	// REQUESTS per second, so a 1000 RPC/s flood cannot overspeed treatment.
+	const double Now = NowSeconds >= 0.0 ? NowSeconds : (GetWorld() ? (double)GetWorld()->GetTimeSeconds() : 0.0);
+	const float Burst = SprayRequestInterval * 2.f;
+	if (LastSprayRateTime < 0.0)
+	{
+		SprayTimeAllowance = Burst;
+	}
+	else
+	{
+		const float Elapsed = (float)FMath::Clamp<double>(Now - LastSprayRateTime, 0.0, (double)Burst);
+		SprayTimeAllowance = FMath::Min(SprayTimeAllowance + Elapsed, Burst);
+	}
+	LastSprayRateTime = Now;
+	const float FinalDt = FMath::Min(Dt, SprayTimeAllowance);
+	if (FinalDt <= 0.f)
+	{
+		UE_LOG(LogHoldover, Verbose, TEXT("Spray rejected (rate limit): %s -> %s"), *Owner->GetName(), *Target->GetName());
+		return false;
+	}
+	SprayTimeAllowance -= FinalDt;
+
+	return ApplySpray(Target, FinalDt);
 }
 
 void UHoldoverSprayComponent::ServerBeginRefill_Implementation(EHoldoverFluidType NewType)

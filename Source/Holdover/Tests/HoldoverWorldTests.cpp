@@ -238,28 +238,45 @@ bool FHoldoverSprayValidationWorldTest::RunTest(const FString& Parameters)
 	// dt=1000 must be clamped to 2x the request interval (0.2s): 25 clean/s * 0.2 = 5.
 	Spray->CarriedFluidType = EHoldoverFluidType::TypeI;
 	Spray->FluidLevel = 100.f;
-	TestTrue(TEXT("In-range spray applied"), Spray->ServerApplySprayRequest(Near, 1000.f));
+	TestTrue(TEXT("In-range spray applied"), Spray->ServerApplySprayRequest(Near, 1000.f, 0.0));
 	TestEqual(TEXT("dt clamp caps cleanliness gain"), Near->CleanlinessPercent, 5.f, 0.01f);
 	TestEqual(TEXT("dt clamp caps tank drain"), Spray->FluidLevel, 100.f - 8.f * 0.2f, 0.01f);
 
 	// Out-of-range target: no change regardless of claimed dt.
 	const float FarBefore = Far->CleanlinessPercent;
-	TestFalse(TEXT("Out-of-range spray rejected"), Spray->ServerApplySprayRequest(Far, 0.1f));
+	TestFalse(TEXT("Out-of-range spray rejected"), Spray->ServerApplySprayRequest(Far, 0.1f, 0.0));
 	TestEqual(TEXT("Far section untouched"), Far->CleanlinessPercent, FarBefore, 0.01f);
 
 	// Type IV on a dirty section is rejected server-side and consumes nothing.
 	AHoldoverSurfaceSection* Dirty = Spawn<AHoldoverSurfaceSection>(World, FVector(300.f, 300.f, 0.f));
 	Spray->CarriedFluidType = EHoldoverFluidType::TypeIV;
 	Spray->FluidLevel = 100.f;
-	TestFalse(TEXT("Type IV rejected on dirty section"), Spray->ServerApplySprayRequest(Dirty, 0.1f));
+	TestFalse(TEXT("Type IV rejected on dirty section"), Spray->ServerApplySprayRequest(Dirty, 0.1f, 0.05));
 	TestEqual(TEXT("Protection unchanged"), Dirty->ProtectionPercent, 0.f, 0.01f);
 	TestEqual(TEXT("Tank untouched on rejection"), Spray->FluidLevel, 100.f, 0.01f);
 
 	// Legitimate request applies clean rules.
 	Spray->CarriedFluidType = EHoldoverFluidType::TypeI;
 	const float Before = Dirty->CleanlinessPercent;
-	TestTrue(TEXT("Legitimate spray applied"), Spray->ServerApplySprayRequest(Dirty, 0.1f));
+	TestTrue(TEXT("Legitimate spray applied"), Spray->ServerApplySprayRequest(Dirty, 0.1f, 0.15));
 	TestEqual(TEXT("Cleanliness rose"), Dirty->CleanlinessPercent, Before + 25.f * 0.1f, 0.01f);
+
+	// Sonnet M1: a same-time RPC flood cannot overspeed treatment — the token
+	// bucket banks at most 2x the request interval (0.2s of spray time).
+	const float FloodBefore = Dirty->CleanlinessPercent;
+	for (int32 i = 0; i < 100; ++i)
+	{
+		Spray->ServerApplySprayRequest(Dirty, 0.2f, 0.15);
+	}
+	TestEqual(TEXT("same-time flood moves nothing"), Dirty->CleanlinessPercent, FloodBefore, 0.01f);
+
+	// After idle time the bucket refills to ONE burst — then exactly one burst
+	// applies no matter how many requests arrive in the same instant.
+	for (int32 i = 0; i < 100; ++i)
+	{
+		Spray->ServerApplySprayRequest(Dirty, 0.2f, 10.0);
+	}
+	TestEqual(TEXT("idle refills one burst only"), Dirty->CleanlinessPercent, FloodBefore + 25.f * 0.2f, 0.01f);
 
 	DestroyTestWorld(World);
 	return true;

@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-11-02 - Sonnet review H3/M1: spray RPC unreliable + spray rate limit
+- **H3 (verified real):** `ServerSpray` was `UFUNCTION(Server, Reliable)` sent at
+  10 Hz per spraying client — a reliable stream that backs up the reliable
+  buffer under packet loss (hitches/disconnects). Now `Unreliable` like
+  `ServerSetBoom`; the request is idempotent (dt clamped server-side), so a
+  lost update costs nothing.
+- **M1 (cheap, rides with H3):** `ServerApplySprayRequest` now runs the same
+  token-bucket pattern as the boom — spray time accrues at 1x real time, banked
+  up to 2x the request interval. dt was already clamped per request; this
+  bounds REQUESTS per second, so a 1000 RPC/s flood can no longer apply ~200s
+  of spray per real second. `NowSeconds` injectable for tests (boom pattern).
+- `Holdover.MP.SprayValidation` extended: injected times + same-time flood
+  (moves nothing) + idle-refill (one burst only). Suite **28/28 pass**.
+
 ## 2026-11-02 - Sonnet review H1/H2 + M17: client-truth fixes
 - **H1 (verified real):** `ShiftNumber`, `TotalCompanyPay`,
   `TotalCompanyDeductions`, `CompanyLedger` were `UPROPERTY(ReplicatedUsing)`

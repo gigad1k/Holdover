@@ -138,14 +138,18 @@ public:
 	 * Server-side handler for a spray request (MP-8 validation lives here; the
 	 * ServerSpray RPC delegates to this). Public so world-based automation tests
 	 * can exercise the exact validation path a remote client hits (PROC-1).
+	 * `NowSeconds` < 0 uses world time (tests inject their own).
 	 * Returns true if treatment was applied.
 	 */
-	bool ServerApplySprayRequest(AHoldoverSurfaceSection* Target, float DeltaSeconds);
+	bool ServerApplySprayRequest(AHoldoverSurfaceSection* Target, float DeltaSeconds, double NowSeconds = -1.0);
 
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 protected:
-	UFUNCTION(Server, Reliable)
+	// Sonnet H3: unreliable — the request is idempotent (dt is clamped server
+	// side), so a lost update costs nothing, while a reliable stream at 10 Hz
+	// per spraying client backs up the reliable buffer under packet loss.
+	UFUNCTION(Server, Unreliable)
 	void ServerSpray(AHoldoverSurfaceSection* Target, float DeltaSeconds);
 
 	UFUNCTION(Server, Reliable)
@@ -167,6 +171,10 @@ protected:
 
 	UPROPERTY(Replicated)
 	float RefillTimeRemaining = 0.f;
+
+	// Sonnet M1: server-side token bucket for spray time (not replicated).
+	float SprayTimeAllowance = 0.f;
+	double LastSprayRateTime = -1.0;
 
 	UPROPERTY(Transient)
 	class UAudioComponent* HissComponent = nullptr;
