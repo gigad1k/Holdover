@@ -1,6 +1,6 @@
 # HANDOFF
 
-_Last written 2026-11-02 at the end of Phase 8a. Read this whole file before continuing._
+_Last written 2026-11-02 at the start of Phase 9 (MP audit done). Read this whole file before continuing._
 
 ## Project / rules recap
 - **HOLDOVER** — UE 5.8 C++ co-op comedy game. Underqualified ground crew deicing
@@ -41,20 +41,23 @@ _Last written 2026-11-02 at the end of Phase 8a. Read this whole file before con
     (30 `builder:greybox` / 10 `builder:atmosphere` / 5 `builder:surface`).
 
 ## IN PROGRESS
-Nothing — Phase 8a closed cleanly. Working tree is clean at `3a9f8c4`.
+**Phase 9 (started 2026-11-02).** MP-1..MP-9 audit DONE — all 9 fixes verified
+landed in source (`Docs/MP_AUDIT_2026-11-02.md`, file:line evidence). Audit
+produced hardening gaps G-1..G-5 (refill RPC not station-bound, boom rate clamp
+per-RPC, no server LOS re-trace on spray/interact, late-join shift-duration +
+pay tuning unreplicated). Working through: PROC-1 world-based MP tests, then
+G-1..G-5, then Phase 10 no-human items (packaging script, build config, demo
+checklist).
 
 ## NEXT 5 STEPS (in order)
-1. **Phase 9 MP audit** (unblocked, no human needed). Per the plan: audit all
-   replicated gameplay — server owns treatment values, fluid consumption, weather,
-   holdover timers, aircraft state, shift rules, penalties, departures; clients
-   only request. Validate two clients cannot double-clear a plane / double-award pay
-   / self-set coverage. Backlog items live in `Docs/CODE_REVIEW_2026-10-29.md` (MP-1..MP-9
-   were pulled into Phase 7.5 — verify them) and `Docs/KNOWN_ISSUES.md`.
-2. **World-based multiplayer automation tests (PROC-1)** — the current suite is
-   world-free unit tests; the plan calls for MP automation as a Phase 9 task.
-3. **Late-join / reconnect correctness** (Phase 9).
-4. **Packaged Win64 development build** (Phase 10a) — `RunUAT BuildCookRun` or
-   package via the editor; launch outside the editor and run a whole shift.
+1. **PROC-1 world-based MP automation tests** — real `UWorld` tests for
+   ServerSpray rejection (dt/range/fluid), double-departure single-award,
+   self-set-coverage impossibility, boom clamp, and a replication-contract test
+   asserting the MP-fix properties stay registered (client-truth regression).
+2. **G-1..G-5 hardening** (per `Docs/MP_AUDIT_2026-11-02.md`), each with a test.
+3. **Late-join verification tests** on top of G-5.
+4. **Packaged Win64 development build** (Phase 10a) — `Tools/package_win64.ps1`
+   wrapping `RunUAT BuildCookRun`; launch outside the editor and run a shift.
 5. **Tutorial / first-shift tips / credits / legal / feedback route** (Phase 10a,
    text only — no store page work).
 

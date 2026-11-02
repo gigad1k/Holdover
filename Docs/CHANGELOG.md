@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 9: MP-1..MP-9 client-truth audit (docs only)
+- `Docs/MP_AUDIT_2026-11-02.md` (new): source-verified audit that the MP-1..MP-9
+  fixes landed, with file:line evidence per issue, plus the Phase 9 server-owns
+  authority checklist (treatment / fluid / weather / timers / aircraft / shift /
+  penalties / departures), double-clear + double-award + self-set-coverage
+  verification, and late-join surface review.
+- Verdict: all 9 fixes LANDED. Audit found 5 hardening gaps (G-1..G-5):
+  refill RPC not station-bound, boom rate clamp per-RPC not per-time,
+  no server LOS re-trace on spray/interact, late-join shift-duration + pay
+  tuning not replicated. These become the Phase 9 hardening backlog.
+- No C++ changed; tests 7/7 (16 cases) unchanged.
+
 ## 2026-11-02 - Phase 8a: snow-sky placeholder + Niagara snow blocker recorded
 - `Tools/build_ramp_atmosphere.py`: added `ATMO_Cloud` (VolumetricCloud) as a heavy
   overcast snow-sky. This is the best scriptable "it is snowing hard" read; real
