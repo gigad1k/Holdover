@@ -46,25 +46,24 @@ _Last written 2026-11-02 at the start of Phase 9 (MP audit done). Read this whol
     (30 `builder:greybox` / 10 `builder:atmosphere` / 5 `builder:surface`).
 
 ## IN PROGRESS
-**Phase 10 (started 2026-11-02). Phase 9 no-human scope is DONE**: MP audit
-(`Docs/MP_AUDIT_2026-11-02.md`), PROC-1 world-based MP tests (5),
-hardening G-1..G-5 each with tests — suite **23/23 green**. Phase 9's
-"done when" still needs the human 2-client/3–4p shift (NEEDS_ALI #5).
-Now: Phase 10 no-human items — `Tools/package_win64.ps1` (RunUAT BuildCookRun
-Win64 Development), build-config review, `Docs/DEMO_CHECKLIST.md`.
+**Phase 10 (started 2026-11-02).** Phase 9 no-human scope is DONE (audit +
+PROC-1 tests + G-1..G-5, suite 23/23). Phase 10a packaging DONE:
+`Tools/package_win64.ps1` builds+cooks+stages+archives a Win64 Development
+build and smoke-tests it (PASS — `Builds\Windows\Holdover.exe` loads
+`L_RampGreybox` with no fatals). `Docs/DEMO_CHECKLIST.md` carries the
+release-candidate list (AUTO items green; B/C need humans). Remaining no-human
+Phase 10 work: text-only tutorial/first-shift tips/credits/legal/feedback
+route (D1–D3 in the checklist).
 
 ## NEXT 5 STEPS (in order)
-1. **`Tools/package_win64.ps1`** — scripted `RunUAT BuildCookRun` Win64
-   Development (cook+stage+pak+archive); run it once and fix what breaks.
-2. **Build config review** — `Holdover.Target.cs`/`HoldoverEditor.Target.cs`/
-   `Holdover.uproject` packaging readiness (no Steam wiring — NEEDS_ALI #6).
-3. **`Docs/DEMO_CHECKLIST.md`** — release-candidate checklist per Phase 10
-   (fresh launch, display/audio, quit/restart, full shift, host/client,
-   low-quality preset), each item marked auto-verifiable vs needs-human.
-4. **Text-only first-shift tips / credits / legal / feedback route** (Phase 10a,
-   no store page work).
-5. **Launch packaged build outside editor + run a whole shift** — the run itself
-   needs a human for the "is it fun/readable" calls; script what is scriptable.
+1. **Text-only first-shift tips / credits / legal / feedback route** (checklist
+   D1–D3) — HUD/main-menu text only, no store page work.
+2. **Human: full shift on the packaged build** (checklist B1–B7) —
+   `Builds\Windows\Holdover.exe`.
+3. **Human: 2-client + 3–4p sessions** (checklist C1–C5, NEEDS_ALI #5).
+4. **NEEDS_ALI #1 DES-6 results → Phase 8 art sign-off** (atmosphere #2,
+   snow #3, assets #4 stay pending until then).
+5. **Steam pass** (NEEDS_ALI #6) — never touch store pages/accounts/payments.
 
 Blocked on Ali (do not wait, keep working on the above):
 `NEEDS_ALI.md` #1 DES-6 playtest gate (gates Phase 8 art sign-off), #2 atmosphere
@@ -89,6 +88,17 @@ sessions, #6 Steamworks.
     later test as MISSING and the log shows no "Automation Test Queue Empty".
   - A bare spawned `AActor` has **no root component** — `GetActorLocation()`
     silently returns (0,0,0). Give world-test owners a `USceneComponent` root.
+- **Packaging gotchas (`Tools/package_win64.ps1`, verified 2026-11-02):**
+  - Cook **fails** without a `GameFeatureData` entry in
+    `[/Script/Engine.AssetManagerSettings]PrimaryAssetTypesToScan`
+    (`Config/DefaultGame.ini` has it — keep it).
+  - Do NOT pipe the script through `Select-Object`/`Out-Null` — a child
+    (the smoke-test game) inherits stdout and PowerShell never returns. Run it
+    bare; the tool captures output itself.
+  - Smoke-test log greps: never match bare `Fatal`/`LoginId` —
+    `loginid=` metadata false-positives. Use
+    `Fatal error|Assertion failed|Critical error|appError called`.
+  - `Builds\` and `Saved\Cooked\` are big and untracked (gitignored) — fine.
 - **Unreal Python API names differ per build — probe before you code.** We built
   `Tools/probe_*.py` scripts for exactly this. Verified names in UE 5.8:
   - `MaterialEditingLibrary.connect_material_property(expr, "", MaterialProperty.MP_BASE_COLOR)`

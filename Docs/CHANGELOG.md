@@ -1,5 +1,28 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 10a: packaged Win64 build + demo checklist
+- `Tools/package_win64.ps1` (new): scripted `RunUAT BuildCookRun`
+  (-build -cook -stage -pak -archive) for Win64 Development, then a headless
+  smoke test (launches `Builds\Windows\Holdover.exe` with `-nullrhi`, scans its
+  log for fatals). Verified end-to-end: BUILD SUCCESSFUL → smoke PASS (game
+  loads `L_RampGreybox`, comes up for play, no fatal errors). ~1 min incremental.
+- `Config/DefaultGame.ini`: added `GameFeatureData` PrimaryAssetTypesToScan
+  rule — without it the cook fails ("Asset manager settings do not include a
+  rule for assets of type GameFeatureData").
+- `Holdover.uproject`: editor-only plugins (ModelContextProtocol, ToolsetRegistry,
+  AllToolsets, PythonScriptPlugin) restricted with `TargetAllowList: ["Editor"]`
+  so they stay out of game builds (the cook still runs in editor context and
+  loads them there).
+- `Docs/DEMO_CHECKLIST.md` (new): release-candidate checklist — AUTO items
+  (build/tests/package/smoke) are green; B/C sections are the human play-through
+  (full shift, display/audio/quit/restart, host+client, 3–4p, net emulation,
+  disconnect, late join); D covers pending text (tutorial/credits/legal/
+  feedback) and the Ali-gated items; E lists remaining blockers.
+- Known non-blocking cook warnings: stale `/Script/TP_FirstPerson` import in
+  `BP_FirstPersonPlayerController.uasset` (template leftover) and the map's
+  GameMode is `BP_FirstPersonGameMode_C` (verify it derives from
+  `AHoldoverGameMode` at checklist B2). Editor suite still 23/23.
+
 ## 2026-11-02 - Phase 9 G-5: late-join shift state fully replicated
 - `AHoldoverGameState`: `LastShiftDuration`, `PayPerOnTimeDeparture` and
   `LateDepartureDeduction` are now replicated. A late joiner previously read the
