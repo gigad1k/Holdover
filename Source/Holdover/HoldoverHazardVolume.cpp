@@ -82,6 +82,15 @@ void AHoldoverHazardVolume::OnOverlapBegin(UPrimitiveComponent* OverlappedComp, 
 				return;
 			}
 		}
+		// Sonnet M7: prune stale weak keys so destroyed/respawned characters do
+		// not accumulate dead entries across a session.
+		for (auto It = JetBlastCooldownMap.CreateIterator(); It; ++It)
+		{
+			if (!It->Key.IsValid())
+			{
+				It.RemoveCurrent();
+			}
+		}
 		JetBlastCooldownMap.Add(Character, Now);
 
 		const FVector LaunchDir = (Character->GetActorLocation() - GetActorLocation()).GetSafeNormal2D() + FVector(0.f, 0.f, 0.35f);

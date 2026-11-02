@@ -241,17 +241,19 @@ void UHoldoverShiftResultsWidget::NativeTick(const FGeometry& MyGeometry, float 
 	}
 
 	// DES-2: per-player attribution on the results screen.
+	// Sonnet M9: iterate the GameState's PlayerArray - a client only has its own
+	// controller, so the old controller iterator showed one row on clients.
 	if (GetWorld() && PlayerLines.Num() > 0)
 	{
 		int32 LineIndex = 0;
-		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It && LineIndex < MaxPlayerLines; ++It)
+		const TArray<APlayerState*>& Players = GS ? GS->PlayerArray : TArray<APlayerState*>();
+		for (APlayerState* PSBase : Players)
 		{
-			const APlayerController* PC = It->Get();
-			if (!PC)
+			if (LineIndex >= MaxPlayerLines)
 			{
-				continue;
+				break;
 			}
-			const AHoldoverPlayerState* PS = PC->GetPlayerState<AHoldoverPlayerState>();
+			const AHoldoverPlayerState* PS = Cast<AHoldoverPlayerState>(PSBase);
 			if (!PS)
 			{
 				continue;

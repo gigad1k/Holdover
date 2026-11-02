@@ -348,4 +348,27 @@ bool FHoldoverShiftProfilesTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverProfilePayRulesTest,
+	"Holdover.Treatment.ProfilePayRules",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverProfilePayRulesTest::RunTest(const FString& Parameters)
+{
+	// Sonnet M13: profile pay rules must actually take effect at StartShift.
+	// They used to be dead data while the GameState kept its C++ defaults.
+	AHoldoverGameState* GS = NewObject<AHoldoverGameState>(GetTransientPackage());
+	GS->ShiftNumber = 4;
+	GS->StartShift(1.f, 1);
+	UHoldoverShiftData* Profile = GS->GetCurrentProfile();
+	if (!TestNotNull(TEXT("profile 4 resolved"), Profile))
+	{
+		return false;
+	}
+	TestEqual(TEXT("pay rule comes from the profile"), GS->PayPerOnTimeDeparture, Profile->PayPerOnTimeDeparture);
+	TestEqual(TEXT("late deduction comes from the profile"), GS->LateDepartureDeduction, Profile->LateDepartureDeduction);
+	// Sanity: profile 4's late rule differs from the C++ default of 50.
+	TestNotEqual(TEXT("profile 4 overrides the default late deduction"), GS->LateDepartureDeduction, 50);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

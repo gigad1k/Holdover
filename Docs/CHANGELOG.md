@@ -1,5 +1,30 @@
 # CHANGELOG
 
+## 2026-11-02 - Sonnet review Mediums: cheap fixes batch
+- **M2:** server LOS traces now ignore the target's sibling surface panels
+  (spray + interact) — a panel behind its own aircraft's other panels (tail
+  behind fuselage) is legitimately hittable and was falsely rejected.
+- **M3:** `RefillTimeRemaining` replicates `COND_OwnerOnly` (only the owner's HUD
+  shows the countdown) — no more per-tick float to every client.
+- **M7:** jet-blast cooldown map prunes stale weak keys on insert.
+- **M9:** results screen iterates `GS->PlayerArray` (a client saw only its own
+  row via the controller iterator).
+- **M10:** `ValidateAndBeginRefill` mirrors the fluid choice onto the owner's
+  `AHoldoverPlayerState::SetCarriedFluid` — the results "[Type I/IV]" tag was
+  permanently wrong (the setter had no callers).
+- **M11:** field-manual `RefreshContent` clears ALL children except the title
+  (headings used to accumulate per refresh) and garbage-collects the old widgets
+  so rebuilt object names are free.
+- **M13:** `StartShift` now applies the profile's `PayPerOnTimeDeparture` /
+  `LateDepartureDeduction` — they were dead data (profile pay rules ignored).
+- **M14 (leak half):** the looping wind ambience is held and stopped in
+  `EndPlay` (it used to leak one loop per respawn/PIE restart).
+- **M17 (server half):** `ServerApplySprayRequest` rejects targets whose owning
+  aircraft is not arrived or already departed.
+- **N1:** the deicing truck no longer ticks (its Tick was empty).
+- New tests: `Holdover.MP.SectionTargetValidation` (M2/M17),
+  `Holdover.Treatment.ProfilePayRules` (M13). Suite **31/31 pass**.
+
 ## 2026-11-02 - Sonnet review H4: shift ledger freezes at the verdict
 - **H4 (verified real):** after `EndShift` froze `bShiftPassed`, the ledger kept
   moving — post-verdict departures registered as late (deductions),

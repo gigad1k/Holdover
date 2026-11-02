@@ -7,6 +7,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "Holdover.h"
+#include "HoldoverAircraft.h"
 #include "HoldoverAudioLibrary.h"
 #include "HoldoverCharacter.h"
 #include "HoldoverSurfaceSection.h"
@@ -211,6 +212,20 @@ bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* T
 		return false;
 	}
 
+	// Sonnet M17: sections of a not-yet-arrived or already-departed aircraft
+	// must not be sprayable (a modified client can name any target).
+	if (const AHoldoverSurfaceSection* TargetSection = Cast<AHoldoverSurfaceSection>(Target))
+	{
+		if (const AHoldoverAircraft* Aircraft = TargetSection->OwningAircraft.Get())
+		{
+			if (!Aircraft->bArrived || Aircraft->bDeparted)
+			{
+				UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (aircraft not live): %s -> %s"), *Owner->GetName(), *Target->GetName());
+				return false;
+			}
+		}
+	}
+
 	// MP-8: never trust client dt — one RPC with dt=1000 must not clean a section.
 	const float Dt = ClampSprayDt(DeltaSeconds, SprayRequestInterval);
 	if (Dt <= 0.f)
@@ -245,6 +260,22 @@ bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* T
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverSprayLOS), false, Owner);
 	Params.AddIgnoredActor(Target);
+	// Sonnet M2: surface sections are separate BlockAll actors — a section whose
+	// centre sits behind a sibling panel (tail behind fuselage) is legitimately
+	// hittable, so the target's sibling panels must not block the server trace.
+	if (const AHoldoverSurfaceSection* M2TargetSection = Cast<AHoldoverSurfaceSection>(Target))
+	{
+		if (const AHoldoverAircraft* M2Aircraft = M2TargetSection->OwningAircraft.Get())
+		{
+			for (const AHoldoverSurfaceSection* Sibling : M2Aircraft->GetSections())
+			{
+				if (Sibling && Sibling != Target)
+				{
+					Params.AddIgnoredActor(Sibling);
+				}
+			}
+		}
+	}
 	if (Owner->GetWorld()->LineTraceSingleByChannel(Hit, Origin, Target->GetActorLocation(), ECC_Visibility, Params))
 	{
 		UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (no line of sight): %s -> %s"), *Owner->GetName(), *Target->GetName());
@@ -332,6 +363,19 @@ bool UHoldoverSprayComponent::ValidateAndBeginRefill(EHoldoverFluidType NewType)
 		*GetNameSafe(Owner),
 		NewType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV"),
 		Duration);
+
+	// Sonnet M10: mirror the fluid choice onto the player's PlayerState so the
+	// results screen shows the right tank tag instead of a stale default.
+	if (const APawn* Pawn = Cast<APawn>(Owner))
+	{
+		if (AController* Controller = Pawn->GetController())
+		{
+			if (AHoldoverPlayerState* PS = Controller->GetPlayerState<AHoldoverPlayerState>())
+			{
+				PS->SetCarriedFluid(NewType);
+			}
+		}
+	}
 	return true;
 }
 
@@ -341,7 +385,9 @@ void UHoldoverSprayComponent::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 	DOREPLIFETIME(UHoldoverSprayComponent, FluidLevel);
 	DOREPLIFETIME(UHoldoverSprayComponent, CarriedFluidType);
 	DOREPLIFETIME(UHoldoverSprayComponent, bRefilling);
-	DOREPLIFETIME(UHoldoverSprayComponent, RefillTimeRemaining);
+	// Sonnet M3: only the owner's HUD shows the refill countdown - stop sending
+	// this float to every client every server tick.
+	DOREPLIFETIME_CONDITION(UHoldoverSprayComponent, RefillTimeRemaining, COND_OwnerOnly);
 }
 
 void UHoldoverSprayComponent::OnRep_Fluid()

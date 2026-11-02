@@ -83,11 +83,16 @@ void UHoldoverInfoWidget::RefreshContent()
 		return;
 	}
 	// Rebuilding from scratch keeps this idempotent and avoids diffing text.
-	for (UTextBlock* Line : BodyLines)
+	// Sonnet M11: headings were not tracked in BodyLines, so every refresh
+	// appended them again - clear ALL children except the title, and garbage the
+	// old widgets so their object names are free for the rebuild.
+	TArray<UWidget*> OldChildren = Box->GetAllChildren();
+	for (UWidget* Child : OldChildren)
 	{
-		if (Line)
+		if (Child && Child != Title)
 		{
-			Line->RemoveFromParent();
+			Child->RemoveFromParent();
+			Child->MarkAsGarbage();
 		}
 	}
 	BodyLines.Reset();

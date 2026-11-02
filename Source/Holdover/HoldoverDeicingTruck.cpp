@@ -22,7 +22,8 @@
 
 AHoldoverDeicingTruck::AHoldoverDeicingTruck()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	// Sonnet N1: Tick was empty - don't pay for one.
+	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 	SetReplicatingMovement(true);
 

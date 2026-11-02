@@ -827,4 +827,66 @@ bool FHoldoverShiftEndFreezeWorldTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Sonnet M2/M17: surface sections are separate BlockAll actors. A target
+// section behind a sibling panel must still be hittable (siblings ignored in
+// the LOS traces), and sections of a not-live aircraft must not be sprayable.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverSectionTargetValidationWorldTest,
+	"Holdover.MP.SectionTargetValidation",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverSectionTargetValidationWorldTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	UHoldoverSprayComponent* Spray = nullptr;
+	AActor* Owner = SpawnSprayOwner(World, FVector::ZeroVector, Spray);
+	AHoldoverAircraft* Aircraft = Spawn<AHoldoverAircraft>(World, FVector(0.f, 1000.f, 0.f));
+	// Front panel sits ON the line to the back panel - without sibling-ignore
+	// the server LOS trace is falsely blocked by the target's own aircraft.
+	AHoldoverSurfaceSection* Front = Spawn<AHoldoverSurfaceSection>(World, FVector(200.f, 0.f, 0.f));
+	AHoldoverSurfaceSection* Back = Spawn<AHoldoverSurfaceSection>(World, FVector(400.f, 0.f, 0.f));
+	if (!TestNotNull(TEXT("Spray owner"), Owner) || !TestNotNull(TEXT("Aircraft"), Aircraft)
+		|| !TestNotNull(TEXT("Front panel"), Front) || !TestNotNull(TEXT("Back panel"), Back)
+		|| !TestNotNull(TEXT("Spray component"), Spray))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+
+	Aircraft->RegisterSection(Front);
+	Aircraft->RegisterSection(Back);
+	Aircraft->bArrived = true;
+	Aircraft->bDeparted = false;
+
+	// M2: the back panel is behind its sibling - spray AND interact must reach it.
+	Spray->CarriedFluidType = EHoldoverFluidType::TypeI;
+	Spray->FluidLevel = 100.f;
+	TestTrue(TEXT("spray reaches a panel behind its sibling"), Spray->ServerApplySprayRequest(Back, 0.1f, 0.0));
+	TestTrue(TEXT("back panel cleaned through sibling"), Back->CleanlinessPercent > 0.f);
+	TestTrue(TEXT("interact reaches a panel behind its sibling"),
+		AHoldoverCharacter::ValidateInteractTarget(Owner, Back, 1000.f));
+
+	// M17: a departed aircraft's panels are not sprayable, even on request.
+	Aircraft->bDeparted = true;
+	const float Before = Back->CleanlinessPercent;
+	TestFalse(TEXT("departed aircraft panels rejected"), Spray->ServerApplySprayRequest(Back, 0.1f, 1.0));
+	TestEqual(TEXT("no treatment on departed panels"), Back->CleanlinessPercent, Before, 0.01f);
+
+	// M17: not-yet-arrived panels are not sprayable either.
+	Aircraft->bDeparted = false;
+	Aircraft->bArrived = false;
+	TestFalse(TEXT("un-arrived aircraft panels rejected"), Spray->ServerApplySprayRequest(Front, 0.1f, 2.0));
+
+	DestroyTestWorld(World);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

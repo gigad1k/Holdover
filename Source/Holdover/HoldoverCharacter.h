@@ -162,6 +162,12 @@ protected:
 	/** MP-9: explicit mapping-context removal on possession end (contexts must not
 	 *  accumulate across enter/exit cycles). */
 	void RemoveHoldoverInputContext();
+
+	/** Sonnet M14: held so the looping wind ambience can be stopped on EndPlay
+	 *  (it used to leak a new loop per respawn/PIE restart). */
+	UPROPERTY(Transient)
+	TObjectPtr<class UAudioComponent> WindLoopComponent;
+
 	virtual void UnPossessed() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 

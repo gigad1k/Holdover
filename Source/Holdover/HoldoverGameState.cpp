@@ -106,6 +106,10 @@ void AHoldoverGameState::StartShift(float DurationSeconds, int32 InQuota)
 	{
 		LastShiftDuration = Profile->ShiftDuration;
 		Quota = Profile->ShiftQuota;
+		// Sonnet M13: the profile's pay rules were dead data - apply them so a
+		// profile that says "late costs 75" actually charges 75.
+		PayPerOnTimeDeparture = Profile->PayPerOnTimeDeparture;
+		LateDepartureDeduction = Profile->LateDepartureDeduction;
 	}
 	else
 	{
