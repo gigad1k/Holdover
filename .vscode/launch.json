@@ -2,9 +2,22 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Attach to Unity",
-            "type": "vstuc",
-            "request": "attach"
+            "name": "Holdover: Build HoldoverEditor (Win64 Development)",
+            "type": "coreclr",
+            "request": "launch",
+            "program": "cmd.exe",
+            "args": [
+                "/c",
+                "C:\\Program Files\\Epic Games\\UE_5.8\\Engine\\Build\\BatchFiles\\Build.bat",
+                "HoldoverEditor",
+                "Win64",
+                "Development",
+                "-project=${workspaceFolder}\\Holdover.uproject",
+                "-waitmutex"
+            ],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "",
+            "console": "externalTerminal"
         }
-     ]
+    ]
 }

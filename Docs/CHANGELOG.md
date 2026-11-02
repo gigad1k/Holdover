@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 10: PROC-6 .vscode template residue removed
+- `.vscode/settings.json` and `launch.json` were Unity-era leftovers (PROC-6):
+  `.unityproj`/`.prefab`/`.booproj`/`.pidb` file excludes, Unity file
+  associations, and an `"Attach to Unity"` (`vstuc`) launch config that cannot
+  work in a UE project. Replaced with UE-appropriate excludes
+  (`Binaries/`/`Intermediate/`/`Saved/`), `.Build.cs`/`.Target.cs`/`.uproject`
+  associations, and a build task for `Build.bat HoldoverEditor Win64 Development`.
+- Tests: no C++ change; suite 26/26 (from the previous run).
+
 ## 2026-11-02 - Phase 10: field-manual evidence in the packaged build
 - Added `UE_LOG` evidence lines so the D1-D3 manual is verifiable in a cooked
   build rather than assumed. Packaged smoke run now records
