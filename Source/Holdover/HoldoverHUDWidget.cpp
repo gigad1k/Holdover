@@ -5,6 +5,7 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Components/TextBlock.h"
+#include "Holdover.h"
 #include "HoldoverGameState.h"
 #include "HoldoverInfoWidget.h"
 #include "HoldoverPanelWidgets.h"
@@ -84,6 +85,35 @@ TSharedRef<SWidget> UHoldoverHUDWidget::RebuildWidget()
 	return Super::RebuildWidget();
 }
 
+void UHoldoverHUDWidget::NativeConstruct()
+{
+	Super::NativeConstruct();
+	// Covers the case where the shift is already running when the HUD appears.
+	MaybeAutoShowInfo();
+}
+
+void UHoldoverHUDWidget::MaybeAutoShowInfo()
+{
+	// Called from NativeConstruct (shift may already be running) and NativeTick
+	// (shift usually starts after the HUD is built). Note that UUserWidget ticks
+	// only through SObjectWidget's Slate paint pass, so this never fires under the
+	// headless `-nullrhi` smoke test - see Docs/DEMO_CHECKLIST.md D1. F1 remains
+	// the reliable access path.
+	if (bAutoShowedInfo || !Info)
+	{
+		return;
+	}
+	const AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
+	if (!GS || GS->ShiftNumber > 1 || GS->ShiftState != EShiftState::InProgress)
+	{
+		return;
+	}
+	bAutoShowedInfo = true;
+	Info->SetVisibility(ESlateVisibility::Visible);
+	Info->RefreshContent();
+	UE_LOG(LogHoldover, Display, TEXT("Field manual auto-opened for first shift"));
+}
+
 void UHoldoverHUDWidget::ToggleInfoPanel()
 {
 	if (!Info)
@@ -121,13 +151,7 @@ void UHoldoverHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 
 	// D1: open the field manual once when the first shift begins, so a player
 	// with no manual sees the tutorial without hunting for a key.
-	if (!bAutoShowedInfo && Info && GS &&
-		GS->ShiftNumber <= 1 && GS->ShiftState == EShiftState::InProgress)
-	{
-		bAutoShowedInfo = true;
-		Info->SetVisibility(ESlateVisibility::Visible);
-		Info->RefreshContent();
-	}
+	MaybeAutoShowInfo();
 
 	// Treatment panel: fluid, tank level, weather, current target (from the possessed pawn).
 	if (TreatmentLine)

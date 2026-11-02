@@ -1,5 +1,22 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 10: field-manual evidence in the packaged build
+- Added `UE_LOG` evidence lines so the D1-D3 manual is verifiable in a cooked
+  build rather than assumed. Packaged smoke run now records
+  `Field manual built: 8 tips + credits/legal/feedback`.
+- **Finding (headless limitation, not a bug):** `UUserWidget::NativeTick` never
+  runs under the `-nullrhi` smoke test — widgets tick only via `SObjectWidget`'s
+  Slate paint pass, which headless has none of. Verified with a temporary
+  diagnostic: `HUD NativeConstruct gs=ok shift=1 state=0` (shift still
+  `WaitingToStart` when the HUD is built) and zero `NativeTick` lines.
+  Consequence: the D1 auto-open cannot be observed headless. It is driven from
+  both `NativeConstruct` (in case the shift is already running) and `NativeTick`
+  (the normal case, where `StartShift` runs after the HUD is built), so it covers
+  both orderings in a real windowed run. **Auto-open is unverified and needs the
+  human windowed play-through (DEMO_CHECKLIST B7/D1); `F1` is the reliable
+  access path.**
+- Tests: `run_tests.ps1` 26/26 pass (C++ behaviour unchanged).
+
 ## 2026-11-02 - Phase 10: packaged-build audio fix + PROC-6 config hygiene
 - **Placeholder audio missing from the packaged build** (found by the smoke test):
   `UHoldoverAudioLibrary::LoadSound` loads cues by name via a soft path, so the

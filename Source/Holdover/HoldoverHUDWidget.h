@@ -25,6 +25,7 @@ class HOLDOVER_API UHoldoverHUDWidget : public UUserWidget
 
 public:
 	virtual TSharedRef<SWidget> RebuildWidget() override;
+	virtual void NativeConstruct() override;
 	virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 	/** D1-D3: toggle the field manual overlay. Idempotent. */
@@ -41,4 +42,8 @@ protected:
 
 	/** Auto-show the manual once on the first shift so a new player finds it. */
 	bool bAutoShowedInfo = false;
+
+	/** Shared by NativeConstruct and NativeTick - one opens it, the other keeps it
+	 *  working if the shift begins after the widget is built. */
+	void MaybeAutoShowInfo();
 };

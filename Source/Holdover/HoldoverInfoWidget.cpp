@@ -9,6 +9,7 @@
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
 #include "HoldoverInfoContent.h"
+#include "Holdover.h"
 #include "Styling/CoreStyle.h"
 
 namespace
@@ -67,6 +68,10 @@ TSharedRef<SWidget> UHoldoverInfoWidget::RebuildWidget()
 
 		WidgetTree->RootWidget = Panel;
 		RefreshContent();
+		// Evidence line for the packaged smoke test: proves the D1-D3 manual was
+		// actually constructed in a cooked build, not just compiled in.
+		UE_LOG(LogHoldover, Display, TEXT("Field manual built: %d tips + credits/legal/feedback"),
+			UHoldoverInfoContent::FirstShiftTips().Num());
 	}
 	return Super::RebuildWidget();
 }
