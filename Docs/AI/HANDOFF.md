@@ -1,6 +1,6 @@
 # HANDOFF
 
-_Last written 2026-11-02 at the start of Phase 9 (MP audit done). Read this whole file before continuing._
+_Last written 2026-11-02 at the end of Phase 10 no-human scope. Read this whole file before continuing._
 
 ## Project / rules recap
 - **HOLDOVER** — UE 5.8 C++ co-op comedy game. Underqualified ground crew deicing
@@ -19,97 +19,66 @@ _Last written 2026-11-02 at the start of Phase 9 (MP audit done). Read this whol
 - 3 repeats of the same failure → stop, `Docs/AI/BLOCKERS.md`, move on.
 - ~75% context → commit + rewrite this file + say so.
 - At each phase end and about hourly → 5-line status in `Docs/AI/STATUS.md`.
+- **Use the Grep tool for content search, not PowerShell scans.** (`Falcon_Grep`
+  is not reachable — no MCP server exposes it and `chrome-devtools` is down.)
 
 ## DONE
-- **Phase 9 no-human scope complete** (6 commits, `1b16274` → `edc9210`):
-  MP-1..MP-9 client-truth audit (all fixes landed — `Docs/MP_AUDIT_2026-11-02.md`),
-  PROC-1 world-based MP tests (5), hardening G-1..G-5 (refill station guard,
-  token-bucket boom rate, server LOS re-trace ×2, late-join replication), each
-  with automation coverage. Suite 23/23 green at `edc9210`.
-- **Phase 7.6 complete** (DES-1..DES-6, SIM-1..SIM-5). Commit `a49dd5c` fixed real
-  bugs found by build+tests: one-tank toolset JSON, `HasAuthority` on a component,
-  null-`GetWorld()` crashes in `HoldoverGameState`, missing `#include "Holdover.h"`
-  (unity builds were masking it), and 2 stale test assertions.
-- **DES-6 playtest script** committed (`34388d0`) — `Docs/DES6_PLAYTEST_SESSION.md`.
-- **Phase 8a complete** (4 commits, `dadec8c` → `3a9f8c4`):
-  - `Tools/mapbuild_common.py` — actor-tag ownership model. Builders tag actors
-    `builder:<name>` and clear **only their own**. Untagged actors never destroyed.
-    Fixes **CODE_REVIEW PROC-5** ("greybox builder deletes hand-placed work").
-    Verified: planted an untagged probe actor, re-ran greybox, it SURVIVED.
-  - `Tools/build_ramp_atmosphere.py` — cold steel-blue moon (3.0) + cool sky (0.8) +
-    cold volumetric height fog (0.03) + 4 warm sodium-orange ramp spot pools (9000cd)
-    + mild post-process (bloom 0.75 / vignette 0.28 / AO 0.55 / auto-exposure
-    0.55-1.85) + `ATMO_Cloud` snow-sky placeholder.
-  - `Tools/build_ramp_surface.py` — `M_ApronWet` (wet apron), `M_Ice` (glassy pad),
-    `M_TaxiLine` + 5 deferred-decal taxi lines.
-  - Tests **7/7 PASS** after every commit. `L_RampGreybox.umap` is at 45 actors
-    (30 `builder:greybox` / 10 `builder:atmosphere` / 5 `builder:surface`).
+- **Phase 7.6 complete** — DES-1..DES-6 + SIM-1..SIM-5. `a49dd5c` fixed real bugs
+  (one-tank toolset JSON, `HasAuthority` on a component, null-`GetWorld()` crashes,
+  missing `#include "Holdover.h"` masked by unity builds, 2 stale test assertions).
+- **DES-6 playtest script** — `Docs/DES6_PLAYTEST_SESSION.md` (`34388d0`).
+- **Phase 8a complete** (`dadec8c`→`3a9f8c4`) — PROC-5 actor-tag ownership model
+  (`Tools/mapbuild_common.py`), atmosphere (`build_ramp_atmosphere.py`), wet/icy
+  materials + taxi decals (`build_ramp_surface.py`), snow-sky cloud placeholder.
+- **Phase 9 complete** (`1b16274`→`edc9210`) — MP-1..MP-9 audit
+  (`Docs/MP_AUDIT_2026-11-02.md`), PROC-1 world-based MP tests (5 `Holdover.MP.*`),
+  hardening G-1..G-5 (refill guard, token-bucket boom rate, server LOS ×2, late-join
+  replication).
+- **Phase 10 no-human complete** (`b483301`→`9ad8c86`) — packaging script
+  (`Tools/package_win64.ps1`), DEMO_CHECKLIST, D1-D3 field manual, packaged audio
+  fix, PROC-6 config hygiene.
 
 ## IN PROGRESS
-**Phase 10 (started 2026-11-02).** Phase 9 no-human scope is DONE (audit +
-PROC-1 tests + G-1..G-5, suite 23/23). Phase 10a packaging DONE:
-`Tools/package_win64.ps1` builds+cooks+stages+archives a Win64 Development
-build and smoke-tests it (PASS — `Builds\Windows\Holdover.exe` loads
-`L_RampGreybox` with no fatals). `Docs/DEMO_CHECKLIST.md` carries the
-release-candidate list (AUTO items green; B/C need humans). Remaining no-human
-Phase 10 work: text-only tutorial/first-shift tips/credits/legal/feedback
-route (D1–D3 in the checklist).
+Nothing. Working tree clean at `9ad8c86`. Suite 26/26 green.
 
 ## NEXT 5 STEPS (in order)
-1. **Text-only first-shift tips / credits / legal / feedback route** (checklist
-   D1–D3) — HUD/main-menu text only, no store page work.
-2. **Human: full shift on the packaged build** (checklist B1–B7) —
-   `Builds\Windows\Holdover.exe`.
-3. **Human: 2-client + 3–4p sessions** (checklist C1–C5, NEEDS_ALI #5).
-4. **NEEDS_ALI #1 DES-6 results → Phase 8 art sign-off** (atmosphere #2,
-   snow #3, assets #4 stay pending until then).
-5. **Steam pass** (NEEDS_ALI #6) — never touch store pages/accounts/payments.
+1. **Ask Ali for `Docs/AI/NEEDS_ALI.md` #7** — the field-manual placeholders
+   (studio name, credits, copyright holder, EULA, feedback route). Until then the
+   credits/legal/feedback text carries `[[TODO:ALI]]` and
+   `Holdover.Info.CreditsLegalFeedback` asserts it is still there.
+2. **Human windowed play-through** (DEMO_CHECKLIST B1-B7) on the packaged build —
+   **including verifying the D1 auto-open** (see GOTCHAS: it cannot be verified
+   headless). This also covers B7 HUD readability, which overlaps NEEDS_ALI #2.
+3. **NEEDS_ALI #5** — 2-client and 3–4 player live MP sessions (C1-C5). Code-side
+   authority is automated; live sessions are the remaining Phase 9 evidence.
+4. **NEEDS_ALI #1** — DES-6 playtest gate. Gates the Phase 8 art sign-off.
+5. **NEEDS_ALI #2/#3/#4** — atmosphere look eyeball, `NS_SnowFlurry` snow emitter,
+   art assets. Then D6 trailer capture and D7 Steamworks (NEEDS_ALI #6).
 
-Blocked on Ali (do not wait, keep working on the above):
-`NEEDS_ALI.md` #1 DES-6 playtest gate (gates Phase 8 art sign-off), #2 atmosphere
-look eyeball, #3 `NS_SnowFlurry` snow emitter, #4 art assets/purchases, #5 3-4p MP
-sessions, #6 Steamworks.
+**There is no remaining AI-implementable work** in the current plan. Every
+DEMO_CHECKLIST item left is HUMAN, BLOCKED, or NEEDS_ALI. If Ali clears a queue
+item, pick up the corresponding row and re-enter the loop.
 
-## GOTCHAS (hard-won — read before touching builders or materials)
-- **UE 5.8 automation-test gotchas (PROC-1, verified 2026-11-02):**
-  - `AHoldoverCharacter` / `AHoldoverGameMode` are `UCLASS(abstract)` —
-    `SpawnActor` refuses them ("is abstract"). Use CDOs
-    (`StaticClass()->GetDefaultObject()`) for contract tests and plain `AActor`
-    spray owners in world tests.
-  - `UWorld::GameState` is **private**; wire it in tests via
-    `FindFProperty<FObjectPropertyBase>(UWorld::StaticClass(), "GameState")->SetObjectPropertyValue_InContainer(...)`.
-  - Calling `GetLifetimeReplicatedProps` from automation on `AHoldoverCharacter`
-    **asserts** (`bIsPushBased == Other.bIsPushBased`, CoreNet.h `FLifetimeProperty::operator==`)
-    and kills the whole test run. Don't enumerate it; check `CPF_Net` flags instead.
-  - `IHoldoverInteractableInterface::Execute_Interact` does NOT dispatch to the
-    native `Interact_Implementation` in automation — call `_Implementation`
-    directly in tests (it works fine in the real PIE game path).
-  - A test-side crash kills the rest of the run: the runner then reports every
-    later test as MISSING and the log shows no "Automation Test Queue Empty".
-  - A bare spawned `AActor` has **no root component** — `GetActorLocation()`
-    silently returns (0,0,0). Give world-test owners a `USceneComponent` root.
-- **Packaging gotchas (`Tools/package_win64.ps1`, verified 2026-11-02):**
-  - Cook **fails** without a `GameFeatureData` entry in
-    `[/Script/Engine.AssetManagerSettings]PrimaryAssetTypesToScan`
-    (`Config/DefaultGame.ini` has it — keep it).
-  - Do NOT pipe the script through `Select-Object`/`Out-Null` — a child
-    (the smoke-test game) inherits stdout and PowerShell never returns. Run it
-    bare; the tool captures output itself.
-  - Smoke-test log greps: never match bare `Fatal`/`LoginId` —
-    `loginid=` metadata false-positives. Use
-    `Fatal error|Assertion failed|Critical error|appError called`.
-  - `Builds\` and `Saved\Cooked\` are big and untracked (gitignored) — fine.
+## GOTCHAS (hard-won — read before touching builders, materials, or UMG)
+- **UMG `UUserWidget::NativeTick` does not run under the headless `-nullrhi` smoke
+  test.** Widgets tick only through `SObjectWidget`'s Slate paint pass, which
+  headless has none of. Verified with a temporary diagnostic: `NativeConstruct`
+  fires (`state=0` / `WaitingToStart`), `NativeTick` never does. Consequence: any
+  per-frame UI logic is **unverifiable in the packaged smoke test** and needs the
+  human windowed run. Evidence lines (`Field manual built: …`) that run from
+  `RebuildWidget`/`NativeConstruct` DO appear headless — use those instead.
 - **Unreal Python API names differ per build — probe before you code.** We built
-  `Tools/probe_*.py` scripts for exactly this. Verified names in UE 5.8:
-  - `MaterialEditingLibrary.connect_material_property(expr, "", MaterialProperty.MP_BASE_COLOR)`
-    for material inputs. **NOT** `connect_material_expressions()` (that is
-    expression→expression only). Enum uses underscores: `MP_BASE_COLOR`,
+  `Tools/probe_*.py` scripts for this (they are gitignored via `Tools/probe_*.py`
+  in `.gitignore`). Verified names in UE 5.8:
+  - Material inputs: `MaterialEditingLibrary.connect_material_property(expr, "",
+    MaterialProperty.MP_BASE_COLOR)` — **not** `connect_material_expressions()`
+    (that is expression→expression only). Enum uses underscores: `MP_BASE_COLOR`,
     `MP_EMISSIVE_COLOR`, `MP_ROUGHNESS`, `MP_METALLIC`.
   - `MaterialDomain.MD_DEFERRED_DECAL` (not `MD_DECAL`) for decal materials.
-  - `DecalComponent` has `set_decal_material()` / `decal_material`. There is **no**
+  - `DecalComponent` has `set_decal_material()` / `decal_material`. **No**
     `set_material()` on it.
-  - `PostProcessVolume` keeps `settings` / `unbound` / `blend_radius` / `blend_weight`
-    **on the actor** — there is no `PostProcessComponent` on it. Override flags are
+  - `PostProcessVolume` keeps `settings` / `unbound` / `blend_radius` /
+    `blend_weight` **on the actor** — no `PostProcessComponent`. Override flags are
     `override_<name>` inside `FPostProcessSettings`.
   - `FPostProcessSettings.color_saturation` / `color_contrast` are **`FVector4`**,
     not `FLinearColor`.
@@ -118,25 +87,35 @@ sessions, #6 Steamworks.
     `set_directional_inscattering_color()` (the fields are `*_luminance`).
   - `-ScriptArgs=-foo=bar` does **not** populate `sys.argv`. Read
     `unreal.SystemLibrary.get_command_line()` and substring-search.
+  - `UScrollBox` uses `AddChild()`, not `AddChildToScrollBox()`.
 - **`UActorComponent` has no `HasAuthority()`** — use `GetOwner()->HasAuthority()`.
+- **`AController` has no `GetHUD()`** — cast to `APlayerController` first.
 - **`#include "Holdover.h"` for `LogHoldover`** — unity builds silently mask a
   missing include; it only surfaces when the adaptive build compiles a file alone.
+  Hit this twice. Check includes when adding a `UE_LOG(LogHoldover, …)`.
 - **`unreal.Rotator` positional ctor is `(roll, pitch, yaw)`.** The spawn helpers in
   `Tools/build_ramp_greybox.py` take `(pitch, yaw, roll)` and map explicitly. Positive
   pitch points AWAY from the scene (map renders black). Keep that convention.
 - **Builder run order:** `build_ramp_greybox.py` → `build_ramp_atmosphere.py` →
-  `build_ramp_surface.py`. Each is idempotent and owns only its own tagged actors.
-- **`Tools/probe_*.py` is gitignored** (`Tools/probe_*.py` in `.gitignore`) — that is
-  intentional; the named `verify_proc5.py` and `mapbuild_common.py` are tracked.
-- **Tests:** `Tools/run_tests.ps1` — 7 expected tests, but 16 actually run. Exit 0 =
-  all pass. Use `-UEPath "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"`
-  (the script's `D:\Gamez\EPIC\UE_5.8` default is stale — that path does not exist).
+  `build_ramp_surface.py`. Each is idempotent and owns only its own tagged actors
+  (`builder:greybox` / `builder:atmosphere` / `builder:surface`).
+- **Packaging:** `Tools/package_win64.ps1 [-Iterate] [-SmokeSeconds N]`. Kill any
+  leftover `Holdover.exe` process first — it holds `Saved\Logs\package_smoke.log`
+  and blocks the archive step (cost us a 30-minute timeout).
 - **Build:** `& "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat" HoldoverEditor Win64 Development -project="<root>\Holdover.uproject" -waitmutex`
   (editor must be closed — Live Coding blocks UBT).
-- **The one pre-existing build warning** (`FCoreDelegates::OnPostEngineInit`
-  deprecated in `HoldoverEditorModule.cpp`) is harmless and not ours to fix.
-- `Docs/TEST_CHECKLIST.md` contains raw cp1252 `0x97` em-dash bytes — whole-file
+- **Tests:** `Tools/run_tests.ps1 -UEPath "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe"`.
+  The script's `D:\Gamez\EPIC\UE_5.8` default is stale — that path does not exist.
+  26 tests run; the script's 7 "expected" names are a legacy subset. Exit 0 = all pass.
+- **One pre-existing build warning** (`FCoreDelegates::OnPostEngineInit` deprecated
+  in `HoldoverEditorModule.cpp`) is harmless and not ours to fix.
+- **`Docs/TEST_CHECKLIST.md` contains raw cp1252 `0x97` em-dash bytes** — whole-file
   re-encoding editors corrupt them. Patch at byte level or restore after.
+- **ClassRedirects in `Config/DefaultEngine.ini` must stay** (TP_FirstPerson →
+  Holdover) until the template Blueprint content is replaced — see `KNOWN_ISSUES.md`.
+  The map's GameMode is `BP_FirstPersonGameMode_C`, which derives from
+  `AHoldoverGameMode` via those redirects. Verified working (the packaged build's
+  `ShiftStart` dispatch fires).
 
 ## Files to know
 - `Tools/mapbuild_common.py` — ownership helpers (`claim`, `clear_owned`,
@@ -144,5 +123,11 @@ sessions, #6 Steamworks.
 - `Tools/build_ramp_greybox.py`, `build_ramp_atmosphere.py`, `build_ramp_surface.py` —
   the three map builders, in run order.
 - `Tools/verify_proc5.py` — `-ScriptArgs=-mode=plant|check|clean` PROC-5 regression check.
-- `Docs/AI/NEEDS_ALI.md`, `BLOCKERS.md`, `STATUS.md` — the human-facing queue.
-- `Docs/CHANGELOG.md` — every commit is ticked here with UE API notes.
+- `Tools/package_win64.ps1` — packaged Win64 build + headless smoke test.
+- `Source/Holdover/HoldoverInfoContent.h/cpp` — all D1-D3 field-manual text.
+  Placeholders use `[[TODO:ALI]]` (`UHoldoverInfoContent::PlaceholderTag()`).
+- `Source/Holdover/HoldoverInfoWidget.h/cpp` — the scrollable manual panel.
+- `Source/Holdover/Tests/` — `HoldoverInfoTests.cpp` (D1-D3 copy),
+  `HoldoverWorldTests.cpp` (`Holdover.MP.*`, PROC-1), plus the legacy suite.
+- `Docs/AI/NEEDS_ALI.md` (7 items), `BLOCKERS.md` (snow), `STATUS.md`, `DEMO_CHECKLIST.md`.
+- `Docs/MP_AUDIT_2026-11-02.md`, `Docs/CHANGELOG.md` — every commit ticked with API notes.
