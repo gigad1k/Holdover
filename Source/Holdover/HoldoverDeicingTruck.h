@@ -64,6 +64,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Boom")
 	void SetBoom(float InYaw, float InExtension);
 
+	/**
+	 * Server-side handler for a boom request (MP-7 rate validation lives here;
+	 * the ServerSetBoom RPC delegates to this). Public so world-based automation
+	 * tests can exercise the exact validation path a remote client hits (PROC-1).
+	 */
+	void ApplyBoomRequest(float InYaw, float InExtension);
+
 	// --- occupancy ---
 	UFUNCTION(BlueprintCallable, Category = "Occupancy")
 	bool TryEnter(AActor* Interactor);

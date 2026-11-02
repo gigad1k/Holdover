@@ -198,17 +198,22 @@ float UHoldoverSprayComponent::ClampSprayDt(float RequestedDt, float Interval)
 
 void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection* Target, float DeltaSeconds)
 {
+	ServerApplySprayRequest(Target, DeltaSeconds);
+}
+
+bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* Target, float DeltaSeconds)
+{
 	AActor* Owner = GetOwner();
 	if (!Owner || !IsValid(Target))
 	{
-		return;
+		return false;
 	}
 
 	// MP-8: never trust client dt — one RPC with dt=1000 must not clean a section.
 	const float Dt = ClampSprayDt(DeltaSeconds, SprayRequestInterval);
 	if (Dt <= 0.f)
 	{
-		return;
+		return false;
 	}
 
 	// MP-8: measure from the active spray origin (truck nozzle / camera), not the
@@ -229,10 +234,10 @@ void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection
 	if (FVector::DistSquared(Origin, Target->GetActorLocation()) > FMath::Square(GetSprayRange() * 2.f))
 	{
 		UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (out of range): %s -> %s"), *Owner->GetName(), *Target->GetName());
-		return;
+		return false;
 	}
 
-	ApplySpray(Target, Dt);
+	return ApplySpray(Target, Dt);
 }
 
 void UHoldoverSprayComponent::ServerBeginRefill_Implementation(EHoldoverFluidType NewType)

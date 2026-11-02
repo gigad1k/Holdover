@@ -41,23 +41,21 @@ _Last written 2026-11-02 at the start of Phase 9 (MP audit done). Read this whol
     (30 `builder:greybox` / 10 `builder:atmosphere` / 5 `builder:surface`).
 
 ## IN PROGRESS
-**Phase 9 (started 2026-11-02).** MP-1..MP-9 audit DONE — all 9 fixes verified
-landed in source (`Docs/MP_AUDIT_2026-11-02.md`, file:line evidence). Audit
-produced hardening gaps G-1..G-5 (refill RPC not station-bound, boom rate clamp
-per-RPC, no server LOS re-trace on spray/interact, late-join shift-duration +
-pay tuning unreplicated). Working through: PROC-1 world-based MP tests, then
-G-1..G-5, then Phase 10 no-human items (packaging script, build config, demo
-checklist).
+**Phase 9 (started 2026-11-02).** MP-1..MP-9 audit DONE (`Docs/MP_AUDIT_2026-11-02.md`).
+PROC-1 world-based MP tests DONE — 5 new tests, suite 21/21 green (`1b16274`+).
+Next: hardening gaps G-1..G-5 (refill RPC not station-bound, boom rate clamp
+per-RPC not per-time, no server LOS re-trace on spray/interact, late-join
+shift-duration + pay tuning unreplicated), then Phase 10 no-human items
+(packaging script, build config, demo checklist).
 
 ## NEXT 5 STEPS (in order)
-1. **PROC-1 world-based MP automation tests** — real `UWorld` tests for
-   ServerSpray rejection (dt/range/fluid), double-departure single-award,
-   self-set-coverage impossibility, boom clamp, and a replication-contract test
-   asserting the MP-fix properties stay registered (client-truth regression).
-2. **G-1..G-5 hardening** (per `Docs/MP_AUDIT_2026-11-02.md`), each with a test.
-3. **Late-join verification tests** on top of G-5.
-4. **Packaged Win64 development build** (Phase 10a) — `Tools/package_win64.ps1`
-   wrapping `RunUAT BuildCookRun`; launch outside the editor and run a shift.
+1. **G-1 refill-station guard** — `ServerBeginRefill` must validate station
+   proximity + valid enum + not-already-refilling (test in
+   `Holdover.MP.RefillGuard`).
+2. **G-2 boom rate clamp per elapsed time** (not per-RPC) + test update.
+3. **G-3/G-4 server LOS re-trace** on spray and interact + tests.
+4. **G-5 late-join replication** (`LastShiftDuration`, pay/deduction tuning) +
+   contract-test update; then packaged Win64 dev build (`Tools/package_win64.ps1`).
 5. **Tutorial / first-shift tips / credits / legal / feedback route** (Phase 10a,
    text only — no store page work).
 
@@ -67,6 +65,21 @@ look eyeball, #3 `NS_SnowFlurry` snow emitter, #4 art assets/purchases, #5 3-4p 
 sessions, #6 Steamworks.
 
 ## GOTCHAS (hard-won — read before touching builders or materials)
+- **UE 5.8 automation-test gotchas (PROC-1, verified 2026-11-02):**
+  - `AHoldoverCharacter` / `AHoldoverGameMode` are `UCLASS(abstract)` —
+    `SpawnActor` refuses them ("is abstract"). Use CDOs
+    (`StaticClass()->GetDefaultObject()`) for contract tests and plain `AActor`
+    spray owners in world tests.
+  - `UWorld::GameState` is **private**; wire it in tests via
+    `FindFProperty<FObjectPropertyBase>(UWorld::StaticClass(), "GameState")->SetObjectPropertyValue_InContainer(...)`.
+  - Calling `GetLifetimeReplicatedProps` from automation on `AHoldoverCharacter`
+    **asserts** (`bIsPushBased == Other.bIsPushBased`, CoreNet.h `FLifetimeProperty::operator==`)
+    and kills the whole test run. Don't enumerate it; check `CPF_Net` flags instead.
+  - `IHoldoverInteractableInterface::Execute_Interact` does NOT dispatch to the
+    native `Interact_Implementation` in automation — call `_Implementation`
+    directly in tests (it works fine in the real PIE game path).
+  - A test-side crash kills the rest of the run: the runner then reports every
+    later test as MISSING and the log shows no "Automation Test Queue Empty".
 - **Unreal Python API names differ per build — probe before you code.** We built
   `Tools/probe_*.py` scripts for exactly this. Verified names in UE 5.8:
   - `MaterialEditingLibrary.connect_material_property(expr, "", MaterialProperty.MP_BASE_COLOR)`

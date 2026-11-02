@@ -1,5 +1,37 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 9: PROC-1 world-based MP automation tests
+- `Source/Holdover/Tests/HoldoverWorldTests.cpp` (new): five world-based MP tests
+  against real spawned actors in a real `UWorld`:
+  - `Holdover.MP.ReplicationContract` — every MP-1..MP-9 fix property is
+    UPROPERTY(Replicated*) (reflection `CPF_Net` check on all 7 classes).
+  - `Holdover.MP.SprayValidation` — ServerSpray handler rejects dt=1000 (clamped
+    to 0.2s), rejects out-of-range targets, rejects Type IV on dirty sections.
+  - `Holdover.MP.DepartOnce` — two clearance requests on one aircraft register
+    exactly one departure and one payment (double-award guard).
+  - `Holdover.MP.CoverageAuthority` — interact never writes treatment values;
+    only the server spray path does (self-set-coverage impossibility).
+  - `Holdover.MP.BoomValidation` — boom requests cannot teleport past
+    YawSpeed/ExtensionSpeed or the absolute clamps.
+- Test seams: `UHoldoverSprayComponent::ServerApplySprayRequest` and
+  `AHoldoverDeicingTruck::ApplyBoomRequest` now hold the server-side validation
+  bodies (the ServerSpray / ServerSetBoom RPCs delegate to them), so tests drive
+  the exact handler a remote client hits.
+- Suite: **21/21 tests pass** (`run_tests.ps1` RESULT: PASS, exit 0).
+- UE 5.8 testing gotchas (hard-won):
+  - `AHoldoverCharacter`/`AHoldoverGameMode` are `UCLASS(abstract)` — SpawnActor
+    refuses them ("is abstract"); tests use CDOs (`StaticClass()->GetDefaultObject()`)
+    and plain AActor spray owners.
+  - `UWorld::GameState` is a private UPROPERTY — wired in tests via
+    `FObjectPropertyBase::SetObjectPropertyValue_InContainer` reflection.
+  - Enumerating `GetLifetimeReplicatedProps` from automation on `AHoldoverCharacter`
+    hits `check(bIsPushBased == Other.bIsPushBased)` in `FLifetimeProperty::operator==`
+    (CoreNet.h:342) and kills the process; the DOREPLIFETIME-parity half of the
+    contract test was dropped (flag checks kept).
+  - `IHoldoverInteractableInterface::Execute_Interact` does NOT reach the native
+    `Interact_Implementation` in this automation context — call the `_Implementation`
+    directly in tests. (`Execute_Interact` works in the real PIE game path.)
+
 ## 2026-11-02 - Phase 9: MP-1..MP-9 client-truth audit (docs only)
 - `Docs/MP_AUDIT_2026-11-02.md` (new): source-verified audit that the MP-1..MP-9
   fixes landed, with file:line evidence per issue, plus the Phase 9 server-owns

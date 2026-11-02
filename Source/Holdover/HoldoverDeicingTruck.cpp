@@ -244,6 +244,11 @@ void AHoldoverDeicingTruck::Tick(float DeltaSeconds)
 
 void AHoldoverDeicingTruck::ServerSetBoom_Implementation(float InYaw, float InExtension)
 {
+	ApplyBoomRequest(InYaw, InExtension);
+}
+
+void AHoldoverDeicingTruck::ApplyBoomRequest(float InYaw, float InExtension)
+{
 	// MP-7: validate movement rate — clamp each request to one second of possible
 	// motion from the server's current state (tolerates lag bursts, rejects teleports).
 	const float Yaw = BoomYaw + FMath::Clamp(InYaw - BoomYaw, -YawSpeed, YawSpeed);

@@ -122,6 +122,14 @@ public:
 	 */
 	bool ApplySpray(AHoldoverSurfaceSection* Target, float DeltaSeconds);
 
+	/**
+	 * Server-side handler for a spray request (MP-8 validation lives here; the
+	 * ServerSpray RPC delegates to this). Public so world-based automation tests
+	 * can exercise the exact validation path a remote client hits (PROC-1).
+	 * Returns true if treatment was applied.
+	 */
+	bool ServerApplySprayRequest(AHoldoverSurfaceSection* Target, float DeltaSeconds);
+
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
 protected:
