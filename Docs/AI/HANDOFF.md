@@ -5,11 +5,15 @@ _Last written 2026-11-02 at the end of Phase 10 no-human scope. Read this whole 
 ## Project / rules recap
 - **HOLDOVER** — UE 5.8 C++ co-op comedy game. Underqualified ground crew deicing
   aircraft before holdover timers expire. Project root:
-  `C:\Users\shahr\orca\workspaces\Holdover\mimo-dev`, branch **`gigad1k/mimo-dev`**.
+  `C:\Users\shahr\orca\workspaces\Holdover\mimo-dev`, branch **`gigad1k/holdover`**.
 - **Work only in this worktree.** Do not touch `main` or `claude-dev`, do not merge
   to main, do not push.
 - Loop per item: implement → build `HoldoverEditor` Win64 Development → run
-  `Tools/run_tests.ps1` to 0 failures → small commit → tick `Docs/CHANGELOG.md`.
+  `Tools/run_tests.ps1` to 0 failures → small commit → **push to
+  `origin/gigad1k/holdover`** → tick `Docs/CHANGELOG.md`.
+- **Push as you go** (Ali, 2026-11-02): each commit goes straight up to
+  `origin/gigad1k/holdover`. Plain `git push` — the branch tracks its upstream.
+  Never force-push, never push to `main`, never merge to `main`.
 - Never hand-edit binary assets. Generate maps/assets **only** through
   `Tools/*.py` builders / MCP.
 - Never enter credentials / create accounts / buy anything / touch Steamworks,
