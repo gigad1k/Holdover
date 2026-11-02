@@ -239,6 +239,18 @@ bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* T
 		return false;
 	}
 
+	// G-3: server-side line of sight — a modified client must not spray through
+	// walls. Same channel the owning client's targeting trace uses, so a target
+	// the client could see always passes here.
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverSprayLOS), false, Owner);
+	Params.AddIgnoredActor(Target);
+	if (Owner->GetWorld()->LineTraceSingleByChannel(Hit, Origin, Target->GetActorLocation(), ECC_Visibility, Params))
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (no line of sight): %s -> %s"), *Owner->GetName(), *Target->GetName());
+		return false;
+	}
+
 	return ApplySpray(Target, Dt);
 }
 

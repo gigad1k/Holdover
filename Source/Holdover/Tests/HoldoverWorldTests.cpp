@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
+#include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -70,6 +71,22 @@ namespace HoldoverWorldTest
 			OutSpray->RegisterComponent();
 		}
 		return Owner;
+	}
+
+	// A solid blocker between two points (G-3/G-4 LOS tests).
+	AActor* SpawnBlocker(UWorld* World, const FVector& Location, float HalfExtent = 50.f)
+	{
+		AActor* Blocker = Spawn<AActor>(World, Location);
+		if (Blocker)
+		{
+			UBoxComponent* Box = NewObject<UBoxComponent>(Blocker, TEXT("Box"));
+			Blocker->SetRootComponent(Box);
+			Box->RegisterComponent();
+			Box->SetBoxExtent(FVector(HalfExtent));
+			Box->SetCollisionProfileName(FName(TEXT("BlockAll")));
+			Box->SetWorldLocation(Location);
+		}
+		return Blocker;
 	}
 
 	template <typename T>
@@ -486,6 +503,70 @@ bool FHoldoverRefillGuardWorldTest::RunTest(const FString& Parameters)
 
 	// The enum check must not block legitimate refills.
 	TestTrue(TEXT("Legitimate refill still accepted"), SecondNearSpray->ValidateAndBeginRefill(EHoldoverFluidType::TypeI));
+
+	DestroyTestWorld(World);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// G-3/G-4 line of sight: the server re-traces spray and interact requests so a
+// modified client cannot act through walls.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverLineOfSightWorldTest,
+	"Holdover.MP.LineOfSight",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverLineOfSightWorldTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	UHoldoverSprayComponent* Spray = nullptr;
+	AActor* Owner = SpawnSprayOwner(World, FVector::ZeroVector, Spray);
+	AHoldoverSurfaceSection* Section = Spawn<AHoldoverSurfaceSection>(World, FVector(300.f, 0.f, 0.f));
+	AActor* Blocker = SpawnBlocker(World, FVector(150.f, 0.f, 0.f));
+	if (!TestNotNull(TEXT("Spray owner"), Owner) || !TestNotNull(TEXT("Section"), Section)
+		|| !TestNotNull(TEXT("Blocker"), Blocker) || !TestNotNull(TEXT("Spray component"), Spray))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+
+	// Spray through a wall: rejected, coverage unchanged.
+	Spray->CarriedFluidType = EHoldoverFluidType::TypeI;
+	Spray->FluidLevel = 100.f;
+	TestFalse(TEXT("Spray through blocker rejected"), Spray->ServerApplySprayRequest(Section, 0.1f));
+	TestEqual(TEXT("Coverage unchanged"), Section->CleanlinessPercent, 0.f, 0.01f);
+
+	// Clear the wall: same request is now legitimate.
+	Blocker->Destroy();
+	TestTrue(TEXT("Spray with clear LOS accepted"), Spray->ServerApplySprayRequest(Section, 0.1f));
+	TestTrue(TEXT("Coverage rose"), Section->CleanlinessPercent > 0.f);
+
+	// Interact validation: range AND line of sight.
+	AActor* Caller = SpawnSprayOwner(World, FVector(0.f, 500.f, 0.f), Spray);
+	AActor* NearTarget = SpawnBlocker(World, FVector(300.f, 500.f, 0.f), 25.f);
+	AActor* Wall = SpawnBlocker(World, FVector(150.f, 500.f, 0.f));
+	AActor* FarTarget = SpawnBlocker(World, FVector(5000.f, 500.f, 0.f), 25.f);
+	if (!TestNotNull(TEXT("Caller"), Caller) || !TestNotNull(TEXT("Near target"), NearTarget)
+		|| !TestNotNull(TEXT("Wall"), Wall) || !TestNotNull(TEXT("Far target"), FarTarget))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+
+	TestFalse(TEXT("Far interact target rejected by range"),
+		AHoldoverCharacter::ValidateInteractTarget(Caller, FarTarget, 1000.f));
+	TestFalse(TEXT("Interact through wall rejected by LOS"),
+		AHoldoverCharacter::ValidateInteractTarget(Caller, NearTarget, 1000.f));
+	Wall->Destroy();
+	TestTrue(TEXT("Interact with clear LOS accepted"),
+		AHoldoverCharacter::ValidateInteractTarget(Caller, NearTarget, 1000.f));
 
 	DestroyTestWorld(World);
 	return true;

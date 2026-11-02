@@ -75,6 +75,13 @@ public:
 	 *  never stack with raw MaxWalkSpeed writes into a permanent speed change. */
 	static float ComputeSpeedScale(bool bSprinting, float SprintScale, float IceScale);
 
+	/**
+	 * G-4: server-side interact validation — distance + line of sight. The
+	 * ServerInteract RPC calls this before touching any interactable. Static and
+	 * caller-agnostic so world-based tests can drive it directly (PROC-1).
+	 */
+	static bool ValidateInteractTarget(const AActor* Caller, const AActor* Target, float Range);
+
 protected:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 

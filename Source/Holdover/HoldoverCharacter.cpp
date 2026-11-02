@@ -364,6 +364,37 @@ void AHoldoverCharacter::InteractPressed(const FInputActionValue& Value)
 	}
 }
 
+bool AHoldoverCharacter::ValidateInteractTarget(const AActor* Caller, const AActor* Target, float Range)
+{
+	if (!IsValid(Caller) || !IsValid(Target) || !Caller->GetWorld())
+	{
+		return false;
+	}
+
+	// Server-side range validation (generous slack for latency)
+	if (FVector::DistSquared(Caller->GetActorLocation(), Target->GetActorLocation()) > FMath::Square(Range))
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Interact rejected (out of range): %s -> %s"),
+			*Caller->GetName(), *Target->GetName());
+		return false;
+	}
+
+	// G-4: server-side line of sight — an in-range target through a wall must
+	// not interact. Same channel the client trace uses, so a target the client
+	// could see always passes here.
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverInteractLOS), false, Caller);
+	Params.AddIgnoredActor(Target);
+	if (Caller->GetWorld()->LineTraceSingleByChannel(Hit, Caller->GetActorLocation(), Target->GetActorLocation(),
+		ECC_Visibility, Params))
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Interact rejected (no line of sight): %s -> %s"),
+			*Caller->GetName(), *Target->GetName());
+		return false;
+	}
+	return true;
+}
+
 void AHoldoverCharacter::ServerInteract_Implementation(AActor* Target)
 {
 	if (!IsValid(Target) ||
@@ -372,10 +403,8 @@ void AHoldoverCharacter::ServerInteract_Implementation(AActor* Target)
 		return;
 	}
 
-	// Server-side range validation (generous slack for latency)
-	if (FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) > FMath::Square(InteractionDistance * 2.f))
+	if (!ValidateInteractTarget(this, Target, InteractionDistance * 2.f))
 	{
-		UE_LOG(LogHoldover, Warning, TEXT("Interact rejected (out of range): %s -> %s"), *GetName(), *Target->GetName());
 		return;
 	}
 

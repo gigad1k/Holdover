@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 9 G-3/G-4: server line-of-sight re-trace on spray + interact
+- `ServerApplySprayRequest` (G-3) and `ServerInteract` (G-4) now re-trace
+  `ECC_Visibility` from the validated origin to the target on the server and
+  reject blocked paths. The client targeting trace uses the same channel, so any
+  target the client can see still passes; a modified client can no longer
+  spray/interact through walls within range.
+- `AHoldoverCharacter::ValidateInteractTarget` (static) holds the range + LOS
+  validation so tests can drive it without spawning the abstract character.
+- New test `Holdover.MP.LineOfSight` (spray-through-wall rejected, clear path
+  accepted, interact range + LOS). Suite **23/23 PASS**.
+
 ## 2026-11-02 - Phase 9 G-2: boom rate limit is per elapsed time, not per RPC
 - `ApplyBoomRequest` (behind `ServerSetBoom`) now runs a server-side **token
   bucket**: the boom moves at most `YawSpeed`/`ExtensionSpeed` per second of
