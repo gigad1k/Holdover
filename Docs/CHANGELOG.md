@@ -1,5 +1,16 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 10: NEEDS_ALI #7 prep - field-manual values isolated
+- `HoldoverInfoContent.cpp`: pulled the six values the AI must not invent into a
+  single marked block at the top of the file (`GStudioName`, `GCodeCredit`,
+  `GArtCredit`, `GCopyrightLine`, `GEulaRef`, `GFeedbackRoute`), each defaulting
+  to `[[TODO:ALI]]`. Supplying NEEDS_ALI #7 is now a six-line edit with no other
+  code touched, and the header comment documents flipping the
+  `Holdover.Info.CreditsLegalFeedback` test afterwards.
+- No behaviour change - all six still default to the placeholder marker, and the
+  test that asserts the markers are present still passes.
+- Tests: `run_tests.ps1` 26/26 pass.
+
 ## 2026-11-02 - Phase 10: PROC-6 .vscode template residue removed
 - `.vscode/settings.json` and `launch.json` were Unity-era leftovers (PROC-6):
   `.unityproj`/`.prefab`/`.booproj`/`.pidb` file excludes, Unity file
