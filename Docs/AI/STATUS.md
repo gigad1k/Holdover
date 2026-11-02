@@ -1,12 +1,12 @@
 # READY FOR ALI
 
-1. All AI-implementable work is DONE: Phase 9 (MP audit, world-based MP tests, hardening G-1..G-5) and Phase 10 (packaged Win64 build, demo checklist, field manual D1-D3, config hygiene).
-2. Suite 26/26 green (`Tools/run_tests.ps1`), including MP, field-manual and legal-DRAFT tests.
-3. Packaged build PASS: `Builds\Windows\Holdover.exe` (Win64 Development) smoke-tested — loads `L_RampGreybox`, 0 fatals, audio cooked, field manual built.
-4. Field manual (F1): 8 first-shift tips + credits + legal + feedback. Legal is labelled "DRAFT - not legal advice, needs Ali/lawyer review" and must not ship as final until reviewed.
-5. Six field-manual values (studio/credits/copyright/EULA/feedback route) are `[[TODO:ALI]]` placeholders — no names, emails or URLs were invented.
-6. `Docs/AI/NEEDS_ALI.md` is now ONE prioritised list: 9 items with exact steps, minutes and follow-ups (~5 h total; items 1-5 are the demo-critical path).
-7. Start there with item 1: play one full shift in `Builds\Windows\Holdover.exe` (~40 min) and report bugs + whether F1/auto-open work.
-8. Then item 2 (DES-6 2-player gate, ~90 min) and item 3 (3-4 player MP, ~45 min) — these unblock the art pass and Phase 9 sign-off.
-9. Still unapproved/blocked: atmosphere look, art assets, snow (`NS_SnowFlurry` needs authoring), Steamworks — all on your side per NEEDS_ALI 6-9.
-10. Branch `gigad1k/holdover`, tree clean, every item committed with CHANGELOG ticks. Note: HANDOFF records a "push as you go" policy, but this session's orders said no push — nothing was pushed; confirm which policy stands.
+1. Sonnet review (`Docs/AI/SONNET_REVIEW_P7-10.md`) processed: all **4 Highs verified real and fixed** (H1 shift-ledger replication, H2 client BeginPlay clobbering `bArrived`, H3 reliable 10 Hz spray RPC, H4 post-verdict ledger movement), each with new tests.
+2. **Cheap Mediums fixed:** M1 spray rate limit, M2 sibling-panel LOS, M3 owner-only refill timer, M7 cooldown prune, M9 results PlayerArray, M10 results fluid tag, M11 manual heading leak, M13 profile pay rules, M14 wind-loop leak, M17 not-live sections, N1 empty tick, M15 test-runner expected list (31 names + cut-short guard), M16 strict smoke gate (map + field-manual evidence, process-tree kill, content-error fails).
+3. Suite **31/31 green** (`Tools/run_tests.ps1`, now with the full expected list) after every commit.
+4. Packaged Win64 build re-verified with the strict smoke gate: `Builds\Windows\Holdover\Binaries\Win64\Holdover.exe` loads `L_RampGreybox`, builds the field manual, 0 fatals, 0 content errors.
+5. Everything committed **and pushed** to `origin/gigad1k/holdover` (7 commits `95b834c`→`42b4cf7`); nothing touched `main`.
+6. Remaining Mediums (M4-M6, M8, M12, M14-remainder, N2-N11) are AI-fixable polish queued in `Docs/KNOWN_ISSUES.md` — **none need Ali**.
+7. `Docs/AI/NEEDS_ALI.md` is unchanged from the consolidated 9-item queue — no review item needed a human.
+8. Still waiting on you: items 1-5 of that queue (packaged full shift ~40 min, DES-6 2-player ~90 min, 3-4p MP ~45 min, 6 field-manual placeholder values ~5 min, legal DRAFT review ~20 min).
+9. Then items 6-9 (atmosphere eyeball, `NS_SnowFlurry`, art assets, Steamworks App ID). Snow stays blocked; art/atmosphere remain unapproved.
+10. Field-manual auto-open still needs the windowed-run confirmation (headless UMG tick limitation — F1 is the reliable path).

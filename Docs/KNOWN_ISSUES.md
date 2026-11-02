@@ -1,5 +1,41 @@
 # KNOWN ISSUES
 
+## Sonnet review 2026-11-02 — Medium backlog (AI-fixable, queued; none need Ali)
+
+Full detail in `Docs/AI/SONNET_REVIEW_P7-10.md`. The 4 Highs and the cheap
+Mediums (M1-M3, M7, M9-M11, M13-M17-fixes, M15-M16, N1) are DONE — see
+`Docs/CHANGELOG.md` 2026-11-02 entries. What remains, in priority order:
+
+- **M4 — client sprint prediction ignores ice slowdown.** `IceScale` is
+  server-only; a sprinting client predicts `Base * sprint` while the server
+  clamps to `Base * ice * sprint` (CMC corrections until `OnRep_SpeedScale`).
+  Fix: replicate `IceScale` or make `SpeedScale` server-only for clients.
+  Needs PIE verification.
+- **M5 — ice slowdown is not overlap-counted.** Leaving one ice patch while
+  inside another clears the slowdown (`OnOverlapEnd` always releases). Fix: a
+  per-character overlap counter.
+- **M6 — jet-blast prediction diverges and doubles on the listen host.** Local
+  launch uses its own `FRandRange`, then the server launches again; the
+  cooldown early-return still launches and the local cue fires every time. Fix:
+  prediction only when `!HasAuthority()`, deterministic launch direction.
+- **M8 — a disconnecting truck occupant leaves an orphan Character.**
+  `EvictOccupant` unhides but never destroys/repossesses; the duplicate
+  eviction logic in GameMode::Logout and PlayerController::PawnLeavingGame
+  should also be merged into one path.
+- **M12 — departure board shows only one aircraft** (first `TActorIterator`
+  hit; with the two-plane shift it can show a hidden/departed plane). Show all
+  arrived, non-departed aircraft.
+- **M14 remainder — audio hygiene.** `Play2D` still `LoadObject`s by string on
+  every call (cache in a subsystem/data asset), `Play2D` on a dedicated server
+  should be skipped, and `OnRep_Dispatch` beeps on the initial join replicate
+  (skip when the feed did not grow). The wind-loop leak is FIXED.
+- **N2-N11 nits** (per-frame HUD string rebuilds, boom RPC every frame +
+  owner drift under clamping, exit teleport when driving is enabled, the
+  restart interactable's double reset + static toggle, missing `HasAuthority`
+  guards on the public shift API, refill-station iterator per RPC, per-tick
+  tuning copy into EditAnywhere properties, unused AI/StateTree module deps,
+  `GetCurrentProfile` mutability). Straightforward, no human needed.
+
 ## Tooling / MCP
 - **`GetVisibleActors` only reports the editor world**, not PIE worlds — during PIE you cannot enumerate
   spawned pawns with it. Use `LogsToolset.GetLogEntries` for PIE evidence.
@@ -17,9 +53,9 @@
   the editor UI. A spawned DirectionalLight with positive pitch points AWAY from the scene and the
   whole map renders black (SkyAtmosphere computes a night sky). `Tools/build_ramp_greybox.py` maps
   `(pitch, yaw, roll)` explicitly via keywords — keep that convention.
-- **Every editor/commandlet start logs 2 "GameFeatureData / Asset Manager settings" errors**
-  (from the GameFeatures plugin enabled by AllToolsets). Harmless for development; silence by
-  adding a `GameFeatureData` PrimaryAssetTypesToScan entry if it becomes noisy.
+- **`GameFeatureData / Asset Manager settings` cook errors are FIXED** —
+  `Config/DefaultGame.ini` now carries the `PrimaryAssetTypesToScan` entry
+  (without it `package_win64.ps1`'s cook fails).
 - **`new_level` cannot overwrite an existing map asset and `delete_asset` silently fails to delete
   a just-saved map** (returns True, asset still exists). No `save_current_level_to`/`save_current_level_as`
   in this build's Python bindings. The builder is idempotent by loading + clearing + `save_current_level`.
