@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 8a: PROC-5 builder actor-ownership model
+- `Tools/mapbuild_common.py` (new): shared ownership helpers. Builders tag their
+  actors `builder:<name>` and clear **only** their own, so hand-placed / Phase 8
+  art work survives any builder run. Fixes CODE_REVIEW PROC-5 ("the greybox
+  builder deletes hand-placed work"), which blocked Phase 8.
+- `Tools/build_ramp_greybox.py`: no longer clears every non-system actor. Clears
+  only `builder:greybox` actors plus untagged legacy actors matching its own
+  labels (one-time migration of the pre-ownership map). Lighting is tagged
+  `builder:atmosphere` and created only as a fallback, so the atmosphere pass can
+  retune it without duplicates.
+- `Tools/verify_proc5.py` (new): plants an untagged hand-placed probe actor,
+  re-runs the greybox builder, and reports survival. Verified: probe SURVIVED,
+  `should_clear_by_greybox=False`, owners = 4 atmosphere / 30 greybox / 1 untagged.
+- Run order is now `build_ramp_greybox.py` first, then `build_ramp_atmosphere.py`.
+- Tests: `run_tests.ps1` 7/7 pass (C++ unchanged).
+
 ## 2026-11-02 - Phase 7.6: build + test fixes (compile clean, 16/16 pass)
 - `HoldoverInputToolset.h/cpp`: `GetPawnInfo` JSON updated to the DES-2 one-tank model
   (`fluidLevel`/`fluidType`) - was still reading removed `TypeIFluid`/`TypeIVFluid`/
