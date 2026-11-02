@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 10: packaged-build audio fix + PROC-6 config hygiene
+- **Placeholder audio missing from the packaged build** (found by the smoke test):
+  `UHoldoverAudioLibrary::LoadSound` loads cues by name via a soft path, so the
+  cooker saw no hard reference and dropped `radio_beep` / `wind_loop`. Added
+  `+DirectoriesToAlwaysCook=(Path="/Game/Holdover/Audio")`. Verified: all 4 cues
+  (`wind_loop`, `spray_hiss`, `radio_beep`, `collision_cue`) now in
+  `Manifest_UFSFiles_Win64.txt`, and the packaged smoke run logs **0**
+  `PLACEHOLDER AUDIO MISSING` warnings (previously 2) while the dispatcher still
+  fires.
+- **PROC-6 security**: `Config/DefaultEngine.ini` shipped an AndroidFileServer
+  `SecurityToken` with `bAllowNetworkConnection=True` on a PC-only project — a
+  usable network credential in source control. Plugin disabled, connection
+  refused, token cleared.
+- `ServerDefaultMap` pointed at `/Engine/Maps/Entry` (engine template map); now
+  `L_RampGreybox` like the game default map.
+- Repackaged and smoke-tested: `RESULT: PASS`, 0 errors / 3 warnings at cook,
+  no fatals, `LoadMap: L_RampGreybox`.
+- Tests: `run_tests.ps1` 26/26 pass (C++ unchanged).
+
 ## 2026-11-02 - Phase 10: D1-D3 field manual (tutorial / credits / legal / feedback)
 - `HoldoverInfoContent.h/cpp` (new): all the text. `FirstShiftTips()` (8 tips
   covering clean/protect order, one-tank relay, holdover clock, hazards,
