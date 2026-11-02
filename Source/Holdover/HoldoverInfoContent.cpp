@@ -102,6 +102,9 @@ FText UHoldoverInfoContent::CreditsText()
 FText UHoldoverInfoContent::LegalText()
 {
 	return FText::FromString(FString::Printf(TEXT(
+		"DRAFT - not legal advice, needs Ali/lawyer review\n"
+		"=================================================\n"
+		"\n"
 		"Copyright (c) %s. All rights reserved.\n"
 		"\n"
 		"HOLDOVER is a work of fiction. Any resemblance to actual airports, "

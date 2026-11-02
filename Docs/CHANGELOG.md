@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 10: legal text labelled DRAFT (not final)
+- `HoldoverInfoContent.cpp` `LegalText()` now leads with
+  **"DRAFT - not legal advice, needs Ali/lawyer review"** — the legal block is a
+  draft only and must never be presented as final until reviewed. The
+  `Holdover.Info.CreditsLegalFeedback` test asserts the label stays present
+  (same flip-after-review rule as the `[[TODO:ALI]]` placeholders).
+- Tests: `run_tests.ps1` 26/26 pass. Repackaged + smoke: PASS (0 fatals,
+  `L_RampGreybox` loads).
+
 ## 2026-11-02 - Phase 10: NEEDS_ALI #7 prep - field-manual values isolated
 - `HoldoverInfoContent.cpp`: pulled the six values the AI must not invent into a
   single marked block at the top of the file (`GStudioName`, `GCodeCredit`,

@@ -78,6 +78,11 @@ bool FHoldoverInfoPlaceholdersTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("legal mentions copyright"), Legal.ToString().Contains(TEXT("Copyright")));
 	TestTrue(TEXT("feedback mentions bugs"), Feedback.ToString().Contains(TEXT("BUG")) || Feedback.ToString().Contains(TEXT("bug")));
 
+	// The legal block is a DRAFT only - it must stay labelled as such until
+	// Ali/lawyer review it, and must never be presented as final.
+	TestTrue(TEXT("legal is labelled DRAFT for Ali/lawyer review"),
+		Legal.ToString().Contains(TEXT("DRAFT - not legal advice, needs Ali/lawyer review")));
+
 	// Ali has not supplied studio name / licence / feedback route yet, so these
 	// MUST still carry the placeholder marker. If this test fails, someone filled
 	// a placeholder in - update NEEDS_ALI.md to match.
