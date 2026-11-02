@@ -203,6 +203,12 @@ void AHoldoverGameState::RestartShift()
 
 void AHoldoverGameState::RegisterDeparture(bool bOnTime, AHoldoverPlayerState* ResponsiblePlayer)
 {
+	// Sonnet H4: the ledger freezes at the verdict - post-EndShift departures
+	// must not move Money/Deductions under the already-computed PASSED/FAILED.
+	if (ShiftState != EShiftState::InProgress)
+	{
+		return;
+	}
 	const FString Who = ResponsiblePlayer ? ResponsiblePlayer->GetShortName() : TEXT("");
 	if (bOnTime)
 	{
@@ -220,7 +226,8 @@ void AHoldoverGameState::RegisterDeparture(bool bOnTime, AHoldoverPlayerState* R
 
 void AHoldoverGameState::RegisterPenalty(int32 Amount, const FString& Reason, AHoldoverPlayerState* ResponsiblePlayer, EDispatchEvent Event)
 {
-	if (Amount <= 0)
+	// Sonnet H4: penalties (holdover aborts, jet blast) stop at the verdict too.
+	if (ShiftState != EShiftState::InProgress || Amount <= 0)
 	{
 		return;
 	}

@@ -46,6 +46,13 @@ void AHoldoverAircraft::Interact_Implementation(AActor* Interactor)
 
 	AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
 
+	// Sonnet H4: no departures after the verdict — the ledger is frozen and the
+	// results banner must not drift from the computed PASSED/FAILED.
+	if (GS && GS->ShiftState != EShiftState::InProgress)
+	{
+		return;
+	}
+
 	// SIM-4: per-aircraft deadline — late if past the deadline OR the shift is over.
 	const bool bOnTime = GS
 		&& GS->ShiftState == EShiftState::InProgress
@@ -189,6 +196,18 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 	if (!HasAuthority())
 	{
 		return;
+	}
+
+	// Sonnet H4: treatment and arrivals stop at the shift verdict. Without this,
+	// un-arrived aircraft "arrive" post-EndShift (Elapsed == duration fires the
+	// arrival dispatch) and SimulateTreatment keeps aborting holdovers into
+	// RegisterPenalty after the results are frozen.
+	if (const AHoldoverGameState* GSCheck = GetWorld()->GetGameState<AHoldoverGameState>())
+	{
+		if (GSCheck->ShiftState != EShiftState::InProgress)
+		{
+			return;
+		}
 	}
 
 	// DES-1: staggered arrival — the plane appears once the shift clock passes its delay.

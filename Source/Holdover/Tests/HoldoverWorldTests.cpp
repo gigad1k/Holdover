@@ -734,4 +734,97 @@ bool FHoldoverReplicationLintTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Sonnet H4: the shift ledger freezes at the verdict. Post-EndShift departures,
+// penalties, holdover aborts and un-arrived "arrivals" must not move
+// Money/Deductions under the already-computed PASSED/FAILED.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverShiftEndFreezeWorldTest,
+	"Holdover.MP.ShiftEndFreeze",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverShiftEndFreezeWorldTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	AHoldoverGameState* GS = Spawn<AHoldoverGameState>(World, FVector::ZeroVector);
+	AHoldoverAircraft* Aircraft1 = Spawn<AHoldoverAircraft>(World, FVector::ZeroVector);
+	AHoldoverAircraft* Aircraft2 = Spawn<AHoldoverAircraft>(World, FVector(1000.f, 0.f, 0.f));
+	AHoldoverAircraft* Aircraft3 = Spawn<AHoldoverAircraft>(World, FVector(2000.f, 0.f, 0.f));
+	AHoldoverSurfaceSection* Section1 = Spawn<AHoldoverSurfaceSection>(World, FVector(300.f, 0.f, 0.f));
+	AHoldoverSurfaceSection* Section2 = Spawn<AHoldoverSurfaceSection>(World, FVector(1300.f, 0.f, 0.f));
+	AActor* Interactor = Spawn<AActor>(World, FVector(200.f, 0.f, 0.f));
+	if (!TestNotNull(TEXT("GameState"), GS) || !TestNotNull(TEXT("Aircraft1"), Aircraft1)
+		|| !TestNotNull(TEXT("Aircraft2"), Aircraft2) || !TestNotNull(TEXT("Aircraft3"), Aircraft3)
+		|| !TestNotNull(TEXT("Section1"), Section1) || !TestNotNull(TEXT("Section2"), Section2)
+		|| !TestNotNull(TEXT("Interactor"), Interactor))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+
+	FObjectPropertyBase* GameStateProp =
+		FindFProperty<FObjectPropertyBase>(UWorld::StaticClass(), FName(TEXT("GameState")));
+	if (!TestNotNull(TEXT("UWorld::GameState property exists"), GameStateProp))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	GameStateProp->SetObjectPropertyValue_InContainer(World, GS);
+	GS->ShiftState = EShiftState::InProgress;
+
+	// One legitimate on-time departure, then the verdict.
+	Aircraft1->RegisterSection(Section1);
+	Section1->ApplyCleaning(Section1->CleanThreshold);
+	Section1->ApplyProtection(100.f);
+	Aircraft1->HoldoverState = EHoldoverState::HoldoverActive;
+	Aircraft1->HoldoverRemaining = 60.f;
+	Aircraft1->Interact_Implementation(Interactor);
+	TestTrue(TEXT("departed before the verdict"), Aircraft1->bDeparted);
+	TestEqual(TEXT("one on-time departure"), GS->OnTimeDepartures, 1);
+
+	GS->EndShift();
+	TestEqual(TEXT("shift ended"), (int32)GS->ShiftState, (int32)EShiftState::ShiftEnded);
+	const int32 FrozenOnTime = GS->OnTimeDepartures;
+	const int32 FrozenLate = GS->LateDepartures;
+	const int32 FrozenMoney = GS->Money;
+	const int32 FrozenDeductions = GS->Deductions;
+
+	// Post-verdict scoring attempts must all be ignored.
+	GS->RegisterDeparture(true);
+	GS->RegisterPenalty(50, TEXT("post-verdict penalty"));
+
+	Aircraft2->RegisterSection(Section2);
+	Section2->ApplyCleaning(Section2->CleanThreshold);
+	Section2->ApplyProtection(100.f);
+	Aircraft2->HoldoverState = EHoldoverState::HoldoverActive;
+	Aircraft2->HoldoverRemaining = 60.f;
+	Aircraft2->Interact_Implementation(Interactor);
+	TestFalse(TEXT("no departure after the verdict"), Aircraft2->bDeparted);
+
+	// Holdover abort after the verdict must not deduct (RegisterPenalty frozen).
+	Section2->ApplyDegradation(100.f);
+	Aircraft2->SimulateTreatment(0.1f, 0.f);
+
+	// Un-arrived aircraft must not "arrive" post-verdict (Elapsed == duration
+	// used to fire the arrival for everyone at EndShift).
+	Aircraft3->bArrived = false;
+	Aircraft3->Tick(0.1f);
+	TestFalse(TEXT("no arrival after the verdict"), Aircraft3->bArrived);
+
+	TestEqual(TEXT("on-time frozen"), GS->OnTimeDepartures, FrozenOnTime);
+	TestEqual(TEXT("late frozen"), GS->LateDepartures, FrozenLate);
+	TestEqual(TEXT("money frozen"), GS->Money, FrozenMoney);
+	TestEqual(TEXT("deductions frozen"), GS->Deductions, FrozenDeductions);
+
+	DestroyTestWorld(World);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

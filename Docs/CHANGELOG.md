@@ -1,5 +1,21 @@
 # CHANGELOG
 
+## 2026-11-02 - Sonnet review H4: shift ledger freezes at the verdict
+- **H4 (verified real):** after `EndShift` froze `bShiftPassed`, the ledger kept
+  moving — post-verdict departures registered as late (deductions),
+  SimulateTreatment kept running (holdover aborts → RegisterPenalty), and every
+  un-arrived aircraft "arrived" at EndShift (`Elapsed == duration`), firing
+  dispatch events. The results banner could show net pay inconsistent with the
+  PASSED/FAILED verdict.
+- Fixes: `RegisterDeparture`/`RegisterPenalty` no-op unless `ShiftState ==
+  InProgress` (covers hazard penalties and aborts too); `Aircraft::Tick` stops
+  arrivals and treatment at the verdict (departure climb-out still runs);
+  `Aircraft::Interact` refuses departures after the verdict.
+- New `Holdover.MP.ShiftEndFreeze`: departs once legitimately, ends the shift,
+  then attempts every post-verdict scoring path (direct register, interact,
+  holdover abort, late arrival) and asserts the ledger is byte-identical.
+  Suite **29/29 pass**.
+
 ## 2026-11-02 - Sonnet review H3/M1: spray RPC unreliable + spray rate limit
 - **H3 (verified real):** `ServerSpray` was `UFUNCTION(Server, Reliable)` sent at
   10 Hz per spraying client — a reliable stream that backs up the reliable
