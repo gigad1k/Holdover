@@ -2,6 +2,7 @@
 
 #include "HoldoverGameState.h"
 #include "EngineUtils.h"
+#include "Holdover.h"
 #include "HoldoverAircraft.h"
 #include "HoldoverAudioLibrary.h"
 #include "HoldoverPlayerState.h"
@@ -135,13 +136,16 @@ void AHoldoverGameState::StartShift(float DurationSeconds, int32 InQuota)
 	WeatherSeverity = WeatherBaseSeverity;
 
 	// DES-2: reset per-player attribution for the new shift.
-	for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+	if (UWorld* World = GetWorld())
 	{
-		if (const AController* C = It->Get())
+		for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
 		{
-			if (AHoldoverPlayerState* PS = C->GetPlayerState<AHoldoverPlayerState>())
+			if (const AController* C = It->Get())
 			{
-				PS->ResetForNewShift();
+				if (AHoldoverPlayerState* PS = C->GetPlayerState<AHoldoverPlayerState>())
+				{
+					PS->ResetForNewShift();
+				}
 			}
 		}
 	}
@@ -188,9 +192,12 @@ void AHoldoverGameState::RestartShift()
 	StartShift(LastShiftDuration, Quota);
 
 	// DES-1: reset all aircraft for the fresh shift.
-	for (TActorIterator<AHoldoverAircraft> It(GetWorld()); It; ++It)
+	if (UWorld* World = GetWorld())
 	{
-		It->ResetForNewShift();
+		for (TActorIterator<AHoldoverAircraft> It(World); It; ++It)
+		{
+			It->ResetForNewShift();
+		}
 	}
 }
 

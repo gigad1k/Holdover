@@ -95,7 +95,7 @@ void UHoldoverSprayComponent::TickComponent(float DeltaTime, ELevelTick TickType
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
 	// Timed refill countdown (server-driven).
-	if (bRefilling && HasAuthority())
+	if (bRefilling && GetOwner() && GetOwner()->HasAuthority())
 	{
 		RefillTimeRemaining -= DeltaTime;
 		if (RefillTimeRemaining <= 0.f)

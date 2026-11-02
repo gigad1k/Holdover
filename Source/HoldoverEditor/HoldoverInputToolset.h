@@ -64,7 +64,7 @@ public:
 	 * Returns the pawn's location, velocity, MaxWalkSpeed and spray-tank state as JSON
 	 * (verification data).
 	 * @param PIEInstance The PIE instance index (0-based).
-	 * @return JSON: {"x":..,"y":..,"z":..,"speed":..,"maxWalkSpeed":..,"typeI":..,"typeIV":..,"fluid":".."}.
+	 * @return JSON: {"x":..,"y":..,"z":..,"speed":..,"maxWalkSpeed":..,"fluidLevel":..,"fluidType":".."}.
 	 */
 	UFUNCTION(meta = (AICallable))
 	static FString GetPawnInfo(int32 PIEInstance);

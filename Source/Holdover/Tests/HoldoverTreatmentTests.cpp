@@ -134,12 +134,13 @@ bool FHoldoverStateMachineTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Holdover full"), Aircraft->HoldoverRemaining, Aircraft->HoldoverDuration, KINDA_SMALL_NUMBER);
 	TestTrue(TEXT("Cleared for takeoff"), Aircraft->IsClearedForTakeoff());
 
-	// Weather burns the clock faster and degrades protection.
+	// Weather burns the clock faster; SIM-2 pauses protection degradation during
+	// an active holdover so expiry (the clock) is the threat, not the abort.
 	Aircraft->SimulateTreatment(1.f, 1.f);
 	const float ExpectedBurn = 1.f * (1.f + 1.f * Aircraft->WeatherBurnMultiplier);
 	TestEqual(TEXT("Weather burns clock"), Aircraft->HoldoverRemaining,
 		Aircraft->HoldoverDuration - ExpectedBurn, 0.01f);
-	TestTrue(TEXT("Protection degraded"), A->ProtectionPercent < 100.f);
+	TestEqual(TEXT("Protection held during holdover"), A->ProtectionPercent, 100.f, KINDA_SMALL_NUMBER);
 
 	// Worsening weather forces retreatment (protection drops below threshold).
 	Aircraft->SimulateTreatment(1000.f, 1.f);

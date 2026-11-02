@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 7.6: build + test fixes (compile clean, 16/16 pass)
+- `HoldoverInputToolset.h/cpp`: `GetPawnInfo` JSON updated to the DES-2 one-tank model
+  (`fluidLevel`/`fluidType`) - was still reading removed `TypeIFluid`/`TypeIVFluid`/
+  `ActiveFluidType` fields.
+- `HoldoverSprayComponent.cpp`: `TickComponent` refill countdown used `HasAuthority()`,
+  which `UActorComponent` does not have - now `GetOwner()->HasAuthority()`.
+- `HoldoverGameState.cpp`: `StartShift` and `RestartShift` dereferenced `GetWorld()`
+  without a null check (crashed `Holdover.Shift.ScoringAndRestart`, which builds a
+  world-less GameState). Added guards; also added the missing `#include "Holdover.h"`
+  for `LogHoldover` that unity builds had been masking.
+- Tests updated to match intended DES-4 / SIM-2 behaviour (not regressions):
+  `Holdover.Shift.ScoringAndRestart` now ticks past `ShiftTimeRemaining` since DES-4
+  profiles own the duration; `Holdover.Treatment.HoldoverStateMachine` now asserts
+  protection is held during active holdover (SIM-2 pauses degradation).
+
 ## 2026-10-31 — Phase 7.6: DES-6 playtest session script
 - `Docs/DES6_PLAYTEST_SESSION.md`: complete 2-player playtest script — session setup, pre-
   session brief, 22-item observation checklist across 3 shifts, DES-6 gate questions

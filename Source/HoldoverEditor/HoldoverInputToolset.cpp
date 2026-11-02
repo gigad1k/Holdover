@@ -153,17 +153,16 @@ FString UHoldoverInputToolset::GetPawnInfo(int32 PIEInstance)
 			MaxWalkSpeed = Move->MaxWalkSpeed;
 		}
 	}
-	float TypeI = -1.f, TypeIV = -1.f;
+	float FluidLevel = -1.f;
 	FString Fluid = TEXT("n/a");
 	if (const UHoldoverSprayComponent* Spray = Pawn->FindComponentByClass<UHoldoverSprayComponent>())
 	{
-		TypeI = Spray->TypeIFluid;
-		TypeIV = Spray->TypeIVFluid;
-		Fluid = Spray->ActiveFluidType == EHoldoverFluidType::TypeI ? TEXT("TypeI") : TEXT("TypeIV");
+		FluidLevel = Spray->FluidLevel;
+		Fluid = Spray->CarriedFluidType == EHoldoverFluidType::TypeI ? TEXT("TypeI") : TEXT("TypeIV");
 	}
 	return FString::Printf(
-		TEXT("{\"x\":%.1f,\"y\":%.1f,\"z\":%.1f,\"speed\":%.1f,\"maxWalkSpeed\":%.1f,\"typeI\":%.1f,\"typeIV\":%.1f,\"fluid\":\"%s\"}"),
-		Loc.X, Loc.Y, Loc.Z, Speed, MaxWalkSpeed, TypeI, TypeIV, *Fluid);
+		TEXT("{\"x\":%.1f,\"y\":%.1f,\"z\":%.1f,\"speed\":%.1f,\"maxWalkSpeed\":%.1f,\"fluidLevel\":%.1f,\"fluidType\":\"%s\"}"),
+		Loc.X, Loc.Y, Loc.Z, Speed, MaxWalkSpeed, FluidLevel, *Fluid);
 }
 
 FString UHoldoverInputToolset::ForceTreatment(float CleanPercent, float ProtectPercent)
