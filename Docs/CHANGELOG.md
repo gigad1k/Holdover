@@ -1,5 +1,20 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 8a: snow-sky placeholder + Niagara snow blocker recorded
+- `Tools/build_ramp_atmosphere.py`: added `ATMO_Cloud` (VolumetricCloud) as a heavy
+  overcast snow-sky. This is the best scriptable "it is snowing hard" read; real
+  *falling* snow is blocked (below).
+- **Falling snow (Niagara) BLOCKED** - UE 5.8 Python cannot author a Niagara
+  emitter here: `NiagaraEditorLibrary` is absent, `NiagaraSystem` exposes no
+  emitter handles, and no snow emitter ships with the engine to copy. We can
+  create an empty `NiagaraSystem` but nothing to put in it. Full diagnosis and
+  unblock paths in `Docs/AI/BLOCKERS.md`; the ~10-minute in-editor step for Ali is
+  `Docs/AI/NEEDS_ALI.md` #3 (author `NS_SnowFlurry`). Placeholder + NEEDS_ALI
+  chosen over inventing a binary asset, per the build plan.
+- `Tools/mapbuild_common.py`: `VolumetricCloud` moved out of the never-destroy
+  system list so the atmosphere builder owns it like other atmosphere actors.
+- Tests: `run_tests.ps1` 7/7 pass (C++ unchanged).
+
 ## 2026-11-02 - Phase 8a: wet/icy ground materials + painted taxi lines
 - `Tools/build_ramp_surface.py` (new): generated materials + decals, no purchased
   textures. `M_ApronWet` (dark cold blue-grey, roughness 0.22 = wet apron) on the

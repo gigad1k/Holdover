@@ -81,7 +81,6 @@ def is_system(actor):
         "WorldSettings", "DefaultPhysicsVolume", "Brush", "AbstractNavData",
         "NavigationDataChunk", "GameplayDebuggerPlayerManager", "ChaosDebugDrawActor",
         "BuoyancyManager", "LevelBounds", "WorldDataLayers", "WorldPartitionMiniMap",
-        "VolumetricCloud",
     )
 
 

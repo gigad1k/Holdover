@@ -188,6 +188,24 @@ except Exception as e:
     unreal.log_error(f"[build_ramp_atmosphere] directional inscattering: FAIL {e}")
 
 # ---------------------------------------------------------------------------
+# 3b. Heavy overcast snow-sky. This is a PLACEHOLDER for real falling snow:
+#     UE 5.8's Python exposes no Niagara emitter authoring (NiagaraEditorLibrary
+#     is absent, NiagaraSystem has no emitter handles, and no snow emitter ships
+#     with the engine to copy) - see Docs/AI/BLOCKERS.md. A VolumetricCloud is the
+#     best scriptable "it is snowing hard" sky we can author headless.
+# ---------------------------------------------------------------------------
+cloud = spawn_class("ATMO_Cloud", unreal.VolumetricCloud, (0, 0, 0))
+vcc = cloud.get_component_by_class(unreal.VolumetricCloudComponent)
+if vcc is not None:
+    for prop, val in (("layer_bottom_altitude", 2200.0),
+                      ("layer_height", 2600.0),
+                      ("tracing_start_max_distance", 3200.0),
+                      ("tracing_max_distance", 26000.0),
+                      ("reflection_view_cloud_cone_step", 0.12),
+                      ("view_sample_count_scale", 1.0)):
+        set_prop(vcc, prop, val, log_fail=False)
+
+# ---------------------------------------------------------------------------
 # 4. Warm sodium-orange ramp working lights under the four light poles.
 #    These are the warmth against the cold - key to the comedy contrast.
 # ---------------------------------------------------------------------------

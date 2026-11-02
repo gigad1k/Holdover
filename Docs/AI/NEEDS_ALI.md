@@ -64,7 +64,36 @@ re-checks the READBACK block until you sign off. One round-trip per verdict.
 
 ---
 
-## 3. Phase 8 art assets + purchases (BLOCKS asset imports)
+## 3. Falling snow VFX — needs an authored Niagara emitter (BLOCKS Phase 8 "Snowfall")
+
+**What:** The Phase 8 plan calls for "Snowfall using Niagara". This build's Python
+API cannot author a Niagara emitter (no `NiagaraEditorLibrary`, no emitter handles
+on `NiagaraSystem`, and no snow emitter ships with the engine to copy). Full
+diagnosis in `Docs/AI/BLOCKERS.md`. Fog, warm lights, ground materials and taxi
+lines are all DONE — only *falling* snow is missing. A `VolumetricCloud`
+(`ATMO_Cloud`) is in place as the snow-sky placeholder.
+
+**Exact steps (preferred — ~10 minutes in the editor):**
+1. Open `Holdover.uproject` in UE 5.8, open the Niagara editor.
+2. Create a new Niagara System, name it `NS_SnowFlurry`, save it to
+   `/Game/Holdover/VFX/` (the folder may already exist from a probe).
+3. Add one emitter and make it a snow flurry: sprites (small white/very pale blue),
+   spawn rate ~2000-4000, gravity/slow downward velocity (~-60 to -120), random
+   initial location inside a box roughly 6000x6000x4000, size 2-6, slight wind/blur,
+   lifetime 4-8s. Keep it sparse enough to see the plane and the HUD through it.
+4. Save. Tell the AI "NS_SnowFlurry is ready".
+
+**Once you answer:** the AI spawns a `NiagaraActor` with `NS_SnowFlurry` from
+`Tools/build_ramp_atmosphere.py` (tagged `builder:atmosphere`, sized to cover the
+60m ramp), wires it into the READBACK verification, re-runs the builder and tests,
+and commits. It will tune spawn rate/bounds headless from there.
+
+**Alternative:** supply an importable snow VFX asset and the AI imports it via a
+`Tools/*.py` builder instead.
+
+---
+
+## 4. Phase 8 art assets + purchases (BLOCKS asset imports)
 
 **What:** Phase 8 also wants modular airport assets (floor, buildings), one
 character and one aircraft, and real materials. The AI cannot buy assets or
@@ -82,7 +111,7 @@ lists the required asset here.
 
 ---
 
-## 4. 3–4 player MP sessions (BLOCKS Phase 9 "done when")
+## 5. 3–4 player MP sessions (BLOCKS Phase 9 "done when")
 
 **What:** Phase 9's done-when is "a host and client complete one shift with matching
 results; then test three or four players." Needs 3–4 humans.
@@ -100,7 +129,7 @@ world-based MP automation tests (PROC-1) before calling Phase 9 done.
 
 ---
 
-## 5. Steamworks setup (BLOCKS Phase 10 Steam prep)
+## 6. Steamworks setup (BLOCKS Phase 10 Steam prep)
 
 **What:** Steamworks account, app ID, store page, and online-subsystem config require
 credentials and purchases. The AI must not create accounts, enter credentials, or buy.
