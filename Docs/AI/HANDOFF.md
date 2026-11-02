@@ -21,6 +21,11 @@ _Last written 2026-11-02 at the start of Phase 9 (MP audit done). Read this whol
 - At each phase end and about hourly → 5-line status in `Docs/AI/STATUS.md`.
 
 ## DONE
+- **Phase 9 no-human scope complete** (6 commits, `1b16274` → `edc9210`):
+  MP-1..MP-9 client-truth audit (all fixes landed — `Docs/MP_AUDIT_2026-11-02.md`),
+  PROC-1 world-based MP tests (5), hardening G-1..G-5 (refill station guard,
+  token-bucket boom rate, server LOS re-trace ×2, late-join replication), each
+  with automation coverage. Suite 23/23 green at `edc9210`.
 - **Phase 7.6 complete** (DES-1..DES-6, SIM-1..SIM-5). Commit `a49dd5c` fixed real
   bugs found by build+tests: one-tank toolset JSON, `HasAuthority` on a component,
   null-`GetWorld()` crashes in `HoldoverGameState`, missing `#include "Holdover.h"`
@@ -41,23 +46,25 @@ _Last written 2026-11-02 at the start of Phase 9 (MP audit done). Read this whol
     (30 `builder:greybox` / 10 `builder:atmosphere` / 5 `builder:surface`).
 
 ## IN PROGRESS
-**Phase 9 (started 2026-11-02).** MP-1..MP-9 audit DONE (`Docs/MP_AUDIT_2026-11-02.md`).
-PROC-1 world-based MP tests DONE — 5 new tests, suite 21/21 green (`1b16274`+).
-Next: hardening gaps G-1..G-5 (refill RPC not station-bound, boom rate clamp
-per-RPC not per-time, no server LOS re-trace on spray/interact, late-join
-shift-duration + pay tuning unreplicated), then Phase 10 no-human items
-(packaging script, build config, demo checklist).
+**Phase 10 (started 2026-11-02). Phase 9 no-human scope is DONE**: MP audit
+(`Docs/MP_AUDIT_2026-11-02.md`), PROC-1 world-based MP tests (5),
+hardening G-1..G-5 each with tests — suite **23/23 green**. Phase 9's
+"done when" still needs the human 2-client/3–4p shift (NEEDS_ALI #5).
+Now: Phase 10 no-human items — `Tools/package_win64.ps1` (RunUAT BuildCookRun
+Win64 Development), build-config review, `Docs/DEMO_CHECKLIST.md`.
 
 ## NEXT 5 STEPS (in order)
-1. **G-1 refill-station guard** — `ServerBeginRefill` must validate station
-   proximity + valid enum + not-already-refilling (test in
-   `Holdover.MP.RefillGuard`).
-2. **G-2 boom rate clamp per elapsed time** (not per-RPC) + test update.
-3. **G-3/G-4 server LOS re-trace** on spray and interact + tests.
-4. **G-5 late-join replication** (`LastShiftDuration`, pay/deduction tuning) +
-   contract-test update; then packaged Win64 dev build (`Tools/package_win64.ps1`).
-5. **Tutorial / first-shift tips / credits / legal / feedback route** (Phase 10a,
-   text only — no store page work).
+1. **`Tools/package_win64.ps1`** — scripted `RunUAT BuildCookRun` Win64
+   Development (cook+stage+pak+archive); run it once and fix what breaks.
+2. **Build config review** — `Holdover.Target.cs`/`HoldoverEditor.Target.cs`/
+   `Holdover.uproject` packaging readiness (no Steam wiring — NEEDS_ALI #6).
+3. **`Docs/DEMO_CHECKLIST.md`** — release-candidate checklist per Phase 10
+   (fresh launch, display/audio, quit/restart, full shift, host/client,
+   low-quality preset), each item marked auto-verifiable vs needs-human.
+4. **Text-only first-shift tips / credits / legal / feedback route** (Phase 10a,
+   no store page work).
+5. **Launch packaged build outside editor + run a whole shift** — the run itself
+   needs a human for the "is it fun/readable" calls; script what is scriptable.
 
 Blocked on Ali (do not wait, keep working on the above):
 `NEEDS_ALI.md` #1 DES-6 playtest gate (gates Phase 8 art sign-off), #2 atmosphere
