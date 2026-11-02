@@ -153,6 +153,9 @@ protected:
 	/** Toggle Type I / Type IV (bound to Q via transient action) */
 	void ToggleFluid(const FInputActionValue& Value);
 
+	/** D1-D3: toggle the field manual overlay (bound to F1 via transient action). */
+	void ToggleInfoPanel(const FInputActionValue& Value);
+
 	/** UE 5.8 removed BindKey: sprint/interact/spray use runtime-created actions + mapping context. */
 	void EnsureExtraInputBindings(UInputComponent* InputComponent);
 
@@ -176,6 +179,9 @@ protected:
 
 	UPROPERTY(Transient)
 	UInputAction* FluidToggleAction;
+
+	UPROPERTY(Transient)
+	UInputAction* InfoAction;
 
 	UPROPERTY(Transient)
 	class UInputMappingContext* HoldoverExtraContext;

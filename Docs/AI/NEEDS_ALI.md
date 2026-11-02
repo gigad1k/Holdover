@@ -139,3 +139,29 @@ this in with the exact Steamworks steps it needs done]
 
 **Once you answer:** the AI wires the Steam online subsystem/transport against the exact
 build and verifies invites/friends locally — it never touches the store page or payments.
+
+---
+
+## 7. Field-manual placeholders — studio / legal / feedback route (BLOCKS D2/D3 sign-off)
+
+**What:** The in-game field manual (press **F1**, or it auto-opens on the first
+shift) carries the tutorial, credits, legal notices and feedback route. The
+tutorial copy is complete. The credits, legal and feedback text still contain the
+marker `[[TODO:ALI]]` where a real name, licence or URL must go — deliberately,
+so nothing ships with invented names or guessed URLs. A test
+(`Holdover.Info.CreditsLegalFeedback`) asserts the markers are still present.
+
+**Exact steps (fill these in):**
+1. **Studio name** — what appears under "Studio:" in the credits.
+2. **Credits names** — design/code, art and audio attribution (or "team" if you
+   want no individual names).
+3. **Copyright holder + year** — e.g. `Copyright (c) 2026 <Holder>.`.
+4. **EULA** — a link or file reference, or say "omit the EULA line".
+5. **Feedback route** — where players report bugs. An email, a Discord invite, or
+   a GitHub issues URL. **The AI will not invent one.**
+
+**Once you answer:** the AI replaces the `[[TODO:ALI]]` markers in
+`Source/Holdover/HoldoverInfoContent.cpp`, flips the
+`Holdover.Info.CreditsLegalFeedback` test from "asserts placeholder present" to
+"asserts no placeholder remains", rebuilds, runs the suite, and commits. No other
+code changes.

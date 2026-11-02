@@ -46,9 +46,9 @@ replication contract); live sessions are the remaining evidence.
 
 | # | Item | Status | Notes |
 |---|---|---|---|
-| D1 | First-shift tutorial / tips | PENDING | text-only, no store page work |
-| D2 | Credits + legal notices | PENDING | text-only |
-| D3 | Feedback route (where players report bugs) | PENDING | text-only |
+| D1 | First-shift tutorial / tips | AUTO (text) | `HoldoverInfoContent` + `HoldoverInfoWidget`; 8 tips auto-open on first shift, `F1` reopens. Covered by `Holdover.Info.TutorialTips`. **Rendering needs a human look (B7).** |
+| D2 | Credits + legal notices | AUTO (text) | Same panel. **Placeholders `[[TODO:ALI]]` still present** (studio name, copyright holder, EULA) - `Holdover.Info.CreditsLegalFeedback` asserts they are unfilled. |
+| D3 | Feedback route (where players report bugs) | AUTO (text) | Same panel, feedback section. **Placeholder - Ali must supply the route** (NEEDS_ALI #7). |
 | D4 | Snow (falling, Niagara) | BLOCKED | see `Docs/AI/BLOCKERS.md` — needs authored `NS_SnowFlurry` (NEEDS_ALI #3) |
 | D5 | Art pass sign-off (atmosphere, assets, character, aircraft) | NEEDS_ALI | #2 atmosphere eyeball, #4 assets — NOT approved by Ali yet |
 | D6 | Trailer / GIFs capture | HUMAN | capture genuine gameplay only after B2 passes |

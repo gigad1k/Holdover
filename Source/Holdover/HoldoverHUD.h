@@ -23,6 +23,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void DrawHUD() override;
 
+	/** D1-D3: toggle the field manual overlay (tutorial / credits / legal / feedback). */
+	void ToggleInfoPanel();
+
 protected:
 	UPROPERTY(Transient)
 	UHoldoverHUDWidget* HUDWidget;

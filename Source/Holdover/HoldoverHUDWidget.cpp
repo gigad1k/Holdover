@@ -6,6 +6,7 @@
 #include "Components/CanvasPanelSlot.h"
 #include "Components/TextBlock.h"
 #include "HoldoverGameState.h"
+#include "HoldoverInfoWidget.h"
 #include "HoldoverPanelWidgets.h"
 #include "HoldoverSprayComponent.h"
 #include "HoldoverSurfaceSection.h"
@@ -63,9 +64,38 @@ TSharedRef<SWidget> UHoldoverHUDWidget::RebuildWidget()
 		Results = CreateWidget<UHoldoverShiftResultsWidget>(GetOwningPlayer());
 		Place(Results, 0.f, -80.f, false, false, true);
 
+		// D1-D3 field manual: fixed-size centred overlay so its ScrollBox scrolls
+		// instead of growing off screen. Starts collapsed; F1 (or first shift)
+		// opens it.
+		Info = CreateWidget<UHoldoverInfoWidget>(GetOwningPlayer());
+		if (Info)
+		{
+			if (UCanvasPanelSlot* InfoSlot = Root->AddChildToCanvas(Info))
+			{
+				InfoSlot->SetAnchors(FAnchors(0.5f, 0.5f, 0.5f, 0.5f));
+				InfoSlot->SetAlignment(FVector2D(0.5f, 0.5f));
+				InfoSlot->SetSize(FVector2D(720.f, 520.f));
+			}
+			Info->SetVisibility(ESlateVisibility::Collapsed);
+		}
+
 		WidgetTree->RootWidget = Root;
 	}
 	return Super::RebuildWidget();
+}
+
+void UHoldoverHUDWidget::ToggleInfoPanel()
+{
+	if (!Info)
+	{
+		return;
+	}
+	const bool bOpen = Info->GetVisibility() == ESlateVisibility::Visible;
+	Info->SetVisibility(bOpen ? ESlateVisibility::Collapsed : ESlateVisibility::Visible);
+	if (!bOpen)
+	{
+		Info->RefreshContent();
+	}
 }
 
 void UHoldoverHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
@@ -87,6 +117,16 @@ void UHoldoverHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	{
 		const bool bEnded = GS && GS->ShiftState == EShiftState::ShiftEnded;
 		Results->SetVisibility(bEnded ? ESlateVisibility::HitTestInvisible : ESlateVisibility::Collapsed);
+	}
+
+	// D1: open the field manual once when the first shift begins, so a player
+	// with no manual sees the tutorial without hunting for a key.
+	if (!bAutoShowedInfo && Info && GS &&
+		GS->ShiftNumber <= 1 && GS->ShiftState == EShiftState::InProgress)
+	{
+		bAutoShowedInfo = true;
+		Info->SetVisibility(ESlateVisibility::Visible);
+		Info->RefreshContent();
 	}
 
 	// Treatment panel: fluid, tank level, weather, current target (from the possessed pawn).

@@ -23,6 +23,14 @@ void AHoldoverHUD::BeginPlay()
 	}
 }
 
+void AHoldoverHUD::ToggleInfoPanel()
+{
+	if (HUDWidget)
+	{
+		HUDWidget->ToggleInfoPanel();
+	}
+}
+
 void AHoldoverHUD::DrawHUD()
 {
 	Super::DrawHUD();

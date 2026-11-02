@@ -1,5 +1,24 @@
 # CHANGELOG
 
+## 2026-11-02 - Phase 10: D1-D3 field manual (tutorial / credits / legal / feedback)
+- `HoldoverInfoContent.h/cpp` (new): all the text. `FirstShiftTips()` (8 tips
+  covering clean/protect order, one-tank relay, holdover clock, hazards,
+  dispatcher), `QuickTip()` (rotating HUD line), `CreditsText()`, `LegalText()`,
+  `FeedbackText()`. Content is separate from UMG so it is testable without
+  rendering and editable without touching widget code.
+- `HoldoverInfoWidget.h/cpp` (new): scrollable C++-built UMG panel following the
+  existing `RebuildWidget()` pattern in `HoldoverPanelWidgets.cpp`.
+- Wired into `UHoldoverHUDWidget` as a fixed-size centred overlay (720x520) that
+  auto-opens once on the first shift so a player with no manual sees the tutorial.
+  `F1` toggles it via a transient input action (same MP-9-safe pattern as the
+  existing sprint/interact/spray bindings).
+- **Placeholders deliberately left in** (`[[TODO:ALI]]`): studio name, credits
+  names, copyright holder, EULA link, feedback route. A test asserts they are
+  still present so nothing ships with invented names or URLs - see
+  `Docs/AI/NEEDS_ALI.md` #7.
+- Tests: `Holdover.Info.TutorialTips` / `QuickTip` / `CreditsLegalFeedback`.
+  Suite **26/26 PASS**.
+
 ## 2026-11-02 - Phase 10a: packaged Win64 build + demo checklist
 - `Tools/package_win64.ps1` (new): scripted `RunUAT BuildCookRun`
   (-build -cook -stage -pak -archive) for Win64 Development, then a headless

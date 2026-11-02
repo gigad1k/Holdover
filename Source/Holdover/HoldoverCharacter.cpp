@@ -164,11 +164,13 @@ void AHoldoverCharacter::EnsureExtraInputBindings(UInputComponent* InInputCompon
 		InteractAction = NewObject<UInputAction>(this, TEXT("IA_Interact_Transient"));
 		SprayAction = NewObject<UInputAction>(this, TEXT("IA_Spray_Transient"));
 		FluidToggleAction = NewObject<UInputAction>(this, TEXT("IA_FluidToggle_Transient"));
+		InfoAction = NewObject<UInputAction>(this, TEXT("IA_Info_Transient"));
 		HoldoverExtraContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Holdover_Transient"));
 		HoldoverExtraContext->MapKey(SprintAction, EKeys::LeftShift);
 		HoldoverExtraContext->MapKey(InteractAction, EKeys::E);
 		HoldoverExtraContext->MapKey(SprayAction, EKeys::LeftMouseButton);
 		HoldoverExtraContext->MapKey(FluidToggleAction, EKeys::Q);
+		HoldoverExtraContext->MapKey(InfoAction, EKeys::F1);
 
 		if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InInputComponent))
 		{
@@ -178,6 +180,7 @@ void AHoldoverCharacter::EnsureExtraInputBindings(UInputComponent* InInputCompon
 			EIC->BindAction(SprayAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprayStarted);
 			EIC->BindAction(SprayAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprayStopped);
 			EIC->BindAction(FluidToggleAction, ETriggerEvent::Started, this, &AHoldoverCharacter::ToggleFluid);
+			EIC->BindAction(InfoAction, ETriggerEvent::Started, this, &AHoldoverCharacter::ToggleInfoPanel);
 		}
 	}
 
@@ -227,6 +230,18 @@ void AHoldoverCharacter::ToggleFluid(const FInputActionValue& Value)
 {
 	// DES-2 one-tank rule: fluid is chosen at the refill station, not toggled.
 	// Q is reserved for future use (e.g. radio / callout).
+}
+
+void AHoldoverCharacter::ToggleInfoPanel(const FInputActionValue& Value)
+{
+	// D1-D3: local cosmetic only - never touches replicated state.
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
+	{
+		if (AHoldoverHUD* HUD = Cast<AHoldoverHUD>(PC->GetHUD()))
+		{
+			HUD->ToggleInfoPanel();
+		}
+	}
 }
 
 void AHoldoverCharacter::SprayStarted(const FInputActionValue& Value)
