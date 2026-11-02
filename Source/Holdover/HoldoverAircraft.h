@@ -39,6 +39,17 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Holdover")
 	float SectionGatherRadius = 1500.f;
 
+	/**
+	 * DES-1: seconds after shift start before this aircraft arrives.
+	 * 0 = present at start. Staggered arrivals create competing holdover clocks.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Holdover")
+	float ArrivalDelay = 0.f;
+
+	/** True once the aircraft has arrived (or had no delay). */
+	UPROPERTY(ReplicatedUsing = OnRep_Arrived, BlueprintReadOnly, Category = "Holdover")
+	bool bArrived = true;
+
 	/** Holdover duration at zero weather (seconds). */
 	UPROPERTY(EditAnywhere, Category = "Holdover")
 	float HoldoverDuration = 120.f;
@@ -50,6 +61,18 @@ public:
 	/** Protection % lost per second at weather severity 1. */
 	UPROPERTY(EditAnywhere, Category = "Holdover")
 	float ProtectionDegradationPerSecond = 2.f;
+
+	/** SIM-2: degradation scale during active holdover (0 = paused, expiry is the threat). */
+	UPROPERTY(EditAnywhere, Category = "Holdover")
+	float HoldoverDegradationScale = 0.f;
+
+	/** SIM-3: cleanliness % lost per second at weather severity 1 on unprotected sections. */
+	UPROPERTY(EditAnywhere, Category = "Contamination")
+	float ReContaminationRatePerSecond = 0.f;
+
+	/** SIM-3: sections at or above this protection % are immune to re-contamination. */
+	UPROPERTY(EditAnywhere, Category = "Contamination")
+	float ReContaminationProtectionThreshold = 50.f;
 
 	// --- state (server writes; clients read) ---
 	UPROPERTY(ReplicatedUsing = OnRep_Holdover, BlueprintReadOnly, Category = "Holdover")
@@ -89,13 +112,19 @@ public:
 	UPROPERTY(Replicated, BlueprintReadOnly, Category = "Holdover")
 	bool bDeparted = false;
 
+	/** SIM-4: server-side arrival timestamp for per-aircraft deadline checks. */
+	float ArrivalTime = -1.f;
+
+	/** SIM-4: is this aircraft's departure window already past? */
+	bool IsDepartureLate() const;
+
 	/**
 	 * Deterministic treatment update: degrades protection with weather, manages
 	 * holdover start/burn/expiry. Called by the server tick; tests call directly.
 	 */
 	void SimulateTreatment(float DeltaSeconds, float WeatherSeverity);
 
-	/** Registers a section (called by sections on BeginPlay). */
+	/** Registers a section and claims ownership (called by sections on BeginPlay or by gather). */
 	void RegisterSection(AHoldoverSurfaceSection* Section);
 
 	virtual void Tick(float DeltaSeconds) override;
@@ -105,6 +134,9 @@ protected:
 
 	UFUNCTION()
 	void OnRep_Holdover();
+
+	UFUNCTION()
+	void OnRep_Arrived();
 
 	UPROPERTY(Transient)
 	TArray<AHoldoverSurfaceSection*> Sections;

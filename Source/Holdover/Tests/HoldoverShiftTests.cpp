@@ -65,8 +65,9 @@ bool FHoldoverShiftLoopTest::RunTest(const FString& Parameters)
 	TestEqual(TEXT("Late counted"), GS->LateDepartures, 1);
 	TestEqual(TEXT("Late deduction"), GS->Deductions, GS->LateDepartureDeduction);
 
-	// Timer ends the shift; 1/2 on-time = fail.
-	GS->TickShift(11.f);
+	// Timer ends the shift; 1/2 on-time = fail. DES-4 profiles own the duration,
+	// so tick past whatever time remains rather than a hardcoded amount.
+	GS->TickShift(GS->ShiftTimeRemaining + 1.f);
 	TestEqual(TEXT("Shift ended"), (int32)GS->ShiftState, (int32)EShiftState::ShiftEnded);
 	TestFalse(TEXT("Quota missed = fail"), GS->bShiftPassed);
 

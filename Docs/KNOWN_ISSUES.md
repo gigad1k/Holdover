@@ -39,3 +39,16 @@
 - **Driving is intentionally off** (DrivingEnabled=false): movement uses FloatingPawnMovement
   without server move RPCs, so enabled driving is single-player-quality only until the Phase 9
   multiplayer audit adds authoritative movement. Boom/occupancy/spray are server-authoritative.
+
+## Gameplay gaps (Phase 7 review backlog)
+- **Hazard volumes only detect `ACharacter`** (`AHoldoverHazardVolume::OnOverlapBegin`) — the deicing
+  truck pawn is immune to jet blast (no launch, no penalty) and triggers no collision cue. Decide
+  truck hazard semantics in the Phase 9 multiplayer audit.
+- **Empty-tank hint is transient**: `TargetHint` ("tank empty" style) appears only while spraying at
+  a section and resets on release. The tank readout is always visible; a persistent hint when idle is
+  nice-to-have.
+- **Dispatcher radio beeps under-play on clients** when the server batches several `AddDispatch`
+  calls into one replication (`OnRep_Dispatch` fires once per batch).
+- **`Docs/TEST_CHECKLIST.md` contains raw `0x97` (cp1252 em dash) bytes** in the Phase 6 bullets.
+  Whole-file re-encoding editors (e.g. the Edit tool) silently turn them into U+FFFD replacement
+  chars — patch such files at byte level or restore the bytes afterwards.

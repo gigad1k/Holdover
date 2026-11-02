@@ -1,7 +1,13 @@
 """Builds Content/Holdover/Maps/L_RampGreybox.umap from engine basic shapes.
 
-Idempotent: loads and clears the map if it exists (system/lighting actors kept
-only when listed in _SYSTEM), otherwise creates it. Saves via save_current_level.
+Idempotent for the actors it owns: loads and clears only its own geometry and
+gameplay actors, then recreates them. Saves via save_current_level.
+
+Ownership (CODE_REVIEW PROC-5): this builder tags its actors ``builder:greybox``
+and destroys only those, so hand-placed / Phase 8 art work survives. Lighting and
+fog belong to ``build_ramp_atmosphere.py`` (tagged ``builder:atmosphere``) and are
+only created here as a fallback when that builder has not run yet. Run order:
+build_ramp_greybox.py first, then build_ramp_atmosphere.py.
 
 Gotcha (cost us a black-screen debug): unreal.Rotator's positional constructor
 is (roll, pitch, yaw) — the spawn helpers below take (pitch, yaw, roll) and map
@@ -15,7 +21,13 @@ Actor labels are the source of truth for what each greybox element is
 (playbook Phase 2: consistent labels so AI-generated objects are identifiable).
 """
 
+import os
+import sys
+
 import unreal
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import mapbuild_common as mbc
 
 MAP_PATH = "/Game/Holdover/Maps/L_RampGreybox"
 CUBE = "/Engine/BasicShapes/Cube.Cube"
@@ -44,37 +56,49 @@ except AttributeError:
     def all_actors():
         return unreal.EditorLevelLibrary.get_all_level_actors()
 
-# Idempotent rebuild: clear the map if it exists (system actors are kept),
-# otherwise create it fresh. (delete_asset/new_level cannot overwrite cleanly.)
-_SYSTEM = ("WorldSettings", "DefaultPhysicsVolume", "Brush", "AbstractNavData",
-           "NavigationDataChunk", "GameplayDebuggerPlayerManager", "ChaosDebugDrawActor",
-           "BuoyancyManager", "LevelBounds", "WorldDataLayers", "WorldPartitionMiniMap",
-           "VolumetricCloud")
+# Idempotent rebuild of OUR actors only. Untagged actors (hand-placed art,
+# atmosphere, anything not ours) are never destroyed. Untagged actors whose
+# label matches what this script creates are legacy greybox output and get
+# adopted into ownership so the map migrates cleanly.
+GREYBOX_LABELS = {
+    "RampFloor", "DeicingPad", "TestAircraft", "RefillStation",
+    "TestInteractable_Refill", "DeicingTruck", "PlayerStart",
+}
+GREYBOX_LABEL_PREFIXES = ("MARKER_", "Hazard_", "AC_", "LightPole_", "SafetyCone_")
+
+
+def _is_legacy_greybox_label(label):
+    return label in GREYBOX_LABELS or label.startswith(GREYBOX_LABEL_PREFIXES)
+
 
 if unreal.EditorAssetLibrary.does_asset_exist(MAP_PATH):
     if not les.load_level(MAP_PATH):
         raise RuntimeError(f"could not load existing {MAP_PATH}")
-    for actor in list(all_actors()):
-        if actor.get_class().get_name() not in _SYSTEM:
-            actor.destroy_actor()
+    actors = list(all_actors())
+    legacy = {a.get_actor_label() for a in actors
+              if mbc.tag_of(a) is None and not mbc.is_system(a)
+              and _is_legacy_greybox_label(str(a.get_actor_label() or ""))}
+    mbc.clear_owned(actors, "greybox", legacy_labels=legacy)
 else:
     if not les.new_level(MAP_PATH):
         raise RuntimeError(f"could not create {MAP_PATH}")
 
 
-def spawn_mesh(label, mesh_path, loc, scale=(1, 1, 1), rot=(0, 0, 0)):
+def spawn_mesh(label, mesh_path, loc, scale=(1, 1, 1), rot=(0, 0, 0), owner="greybox"):
     actor = spawn_actor(unreal.StaticMeshActor, loc, rot)
     mesh = unreal.load_asset(mesh_path)
     smc = actor.get_component_by_class(unreal.StaticMeshComponent)
     smc.set_static_mesh(mesh)
     actor.set_actor_scale3d(unreal.Vector(*scale))
     actor.set_actor_label(label)
+    mbc.claim(actor, owner)
     return actor
 
 
-def spawn_class(label, cls, loc, rot=(0, 0, 0)):
+def spawn_class(label, cls, loc, rot=(0, 0, 0), owner="greybox"):
     actor = spawn_actor(cls, loc, rot)
     actor.set_actor_label(label)
+    mbc.claim(actor, owner)
     return actor
 
 
@@ -93,11 +117,13 @@ ice = spawn_actor(unreal.HoldoverHazardVolume, (-1800, 800, 0), (0, 0, 0))
 ice.set_actor_label("Hazard_IcePatch")
 ice.set_editor_property("hazard_type", unreal.HoldoverHazardType.ICE)
 ice.set_actor_scale3d(unreal.Vector(2, 2, 1))
+mbc.claim(ice, "greybox")
 
 blast = spawn_actor(unreal.HoldoverHazardVolume, (0, 4200, 0), (0, 0, 0))
 blast.set_actor_label("Hazard_JetBlast")
 blast.set_editor_property("hazard_type", unreal.HoldoverHazardType.JET_BLAST)
 blast.set_actor_scale3d(unreal.Vector(5, 3, 2))
+mbc.claim(blast, "greybox")
 
 # --- test aircraft: one AHoldoverAircraft + four labelled surface sections ---
 spawn_class("TestAircraft", unreal.HoldoverAircraft, (0, 2600, 0))
@@ -108,6 +134,7 @@ def spawn_section(label, section_name, loc, scale):
     actor.set_actor_label(label)
     actor.set_editor_property("section_name", section_name)
     actor.set_actor_scale3d(unreal.Vector(*scale))
+    mbc.claim(actor, "greybox")
     return actor
 
 
@@ -138,24 +165,36 @@ for i in range(6):
 # --- player start, facing the pad ---
 spawn_class("PlayerStart", unreal.PlayerStart, (0, -2200, 120), rot=(0, 90, 0))
 
-# --- lighting: negative pitch so the sun points DOWN at the scene ---
-sun = spawn_class("Sun_Directional", unreal.DirectionalLight, (0, 0, 1200), rot=(-45, 30, 0))
-dlc = sun.get_component_by_class(unreal.DirectionalLightComponent)
-dlc.set_intensity(6.0)
-dlc.set_editor_property("atmosphere_sun_light", True)
+# --- lighting fallback: only if build_ramp_atmosphere.py has not run yet ---
+# These belong to the atmosphere builder (tagged builder:atmosphere) so its pass
+# can retune or replace them without this script recreating duplicates. Legacy
+# untagged lighting is adopted into atmosphere ownership first.
+mbc.adopt_untagged_of_classes(all_actors(), "atmosphere", mbc.ATMO_CLASSES)
+_have_atmo = any(mbc.is_owned_by(a, "atmosphere") for a in all_actors())
+if not _have_atmo:
+    # Negative pitch so the sun points DOWN at the scene.
+    sun = spawn_class("Sun_Directional", unreal.DirectionalLight, (0, 0, 1200),
+                      rot=(-45, 30, 0), owner="atmosphere")
+    dlc = sun.get_component_by_class(unreal.DirectionalLightComponent)
+    dlc.set_intensity(6.0)
+    dlc.set_editor_property("atmosphere_sun_light", True)
 
-sky = spawn_class("SkyLight", unreal.SkyLight, (0, 0, 1000))
-slc = sky.get_component_by_class(unreal.SkyLightComponent)
-slc.set_intensity(1.0)
-try:
-    slc.set_editor_property("real_time_capture", True)
-except Exception:
-    unreal.SystemLibrary.execute_console_command(None, "r.SkyLightRealTimeCapture 1")
+    sky = spawn_class("SkyLight", unreal.SkyLight, (0, 0, 1000), owner="atmosphere")
+    slc = sky.get_component_by_class(unreal.SkyLightComponent)
+    slc.set_intensity(1.0)
+    try:
+        slc.set_editor_property("real_time_capture", True)
+    except Exception:
+        unreal.SystemLibrary.execute_console_command(None, "r.SkyLightRealTimeCapture 1")
 
-spawn_class("SkyAtmosphere", unreal.SkyAtmosphere, (0, 0, 0))
-spawn_class("HeightFog", unreal.ExponentialHeightFog, (0, 0, 0))
+    spawn_class("SkyAtmosphere", unreal.SkyAtmosphere, (0, 0, 0), owner="atmosphere")
+    spawn_class("HeightFog", unreal.ExponentialHeightFog, (0, 0, 0), owner="atmosphere")
+else:
+    unreal.log_error("[build_ramp_greybox] atmosphere-owned lighting present; leaving it alone")
 
 if not les.save_current_level():
     raise RuntimeError("failed to save level")
 
-unreal.log_error(f"[build_ramp_greybox] saved {MAP_PATH} with {len(all_actors())} actors")
+unreal.log_error(
+    f"[build_ramp_greybox] saved {MAP_PATH} with {len(all_actors())} actors "
+    f"({mbc.count_owned(all_actors(), 'greybox')} greybox-owned)")

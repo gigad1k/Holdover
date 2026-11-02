@@ -5,6 +5,7 @@
 #include "EngineUtils.h"
 #include "Holdover.h"
 #include "HoldoverGameState.h"
+#include "HoldoverPlayerState.h"
 #include "HoldoverSurfaceSection.h"
 #include "Net/UnrealNetwork.h"
 
@@ -12,7 +13,8 @@ AHoldoverAircraft::AHoldoverAircraft()
 {
 	PrimaryActorTick.bCanEverTick = true;
 	bReplicates = true;
-	SetReplicatingMovement(false);
+	// MP-5: clients must see the departure climb-out and shift-reset jumps.
+	SetReplicatingMovement(true);
 
 	// Scene root so the actor can hold a transform (required for spawn placement).
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
@@ -43,13 +45,38 @@ void AHoldoverAircraft::Interact_Implementation(AActor* Interactor)
 	}
 
 	AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
-	const bool bOnTime = GS && GS->ShiftState == EShiftState::InProgress && GS->ShiftTimeRemaining > 0.f;
+
+	// SIM-4: per-aircraft deadline — late if past the deadline OR the shift is over.
+	const bool bOnTime = GS
+		&& GS->ShiftState == EShiftState::InProgress
+		&& !IsDepartureLate();
 
 	if (TryDepart())
 	{
+		// DES-2: attribute the departure to the player who requested it.
+		AHoldoverPlayerState* PS = nullptr;
+		if (const APawn* Pawn = Cast<APawn>(Interactor))
+		{
+			if (const AController* C = Pawn->GetController())
+			{
+				PS = C->GetPlayerState<AHoldoverPlayerState>();
+			}
+		}
+		if (PS)
+		{
+			PS->RecordDeparture();
+			if (bOnTime)
+			{
+				PS->AddEarnings(GS ? GS->PayPerOnTimeDeparture : 100);
+			}
+			else
+			{
+				PS->AddPenalty(GS ? GS->LateDepartureDeduction : 50);
+			}
+		}
 		if (GS)
 		{
-			GS->RegisterDeparture(bOnTime);
+			GS->RegisterDeparture(bOnTime, PS);
 		}
 		UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' departed (%s)"), *GetName(), bOnTime ? TEXT("on-time") : TEXT("late"));
 	}
@@ -69,9 +96,13 @@ bool AHoldoverAircraft::TryDepart()
 void AHoldoverAircraft::ResetForNewShift()
 {
 	bDeparted = false;
+	bArrived = ArrivalDelay <= 0.f;
+	ArrivalTime = bArrived ? (GetWorld() ? GetWorld()->GetTimeSeconds() : 0.f) : -1.f;
 	HoldoverState = EHoldoverState::Incomplete;
 	HoldoverRemaining = 0.f;
 	SetActorLocation(SpawnLocation);
+	SetActorHiddenInGame(!bArrived);
+	SetActorEnableCollision(bArrived);
 	for (AHoldoverSurfaceSection* Section : Sections)
 	{
 		if (Section)
@@ -82,23 +113,45 @@ void AHoldoverAircraft::ResetForNewShift()
 	}
 }
 
+bool AHoldoverAircraft::IsDepartureLate() const
+{
+	if (ArrivalTime < 0.f || !GetWorld())
+	{
+		return false;
+	}
+	const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>();
+	const float Deadline = GS ? GS->GetPerAircraftDeadlineSeconds() : 300.f;
+	return GetWorld()->GetTimeSeconds() > ArrivalTime + Deadline;
+}
+
 void AHoldoverAircraft::BeginPlay()
 {
 	Super::BeginPlay();
 
 	SpawnLocation = GetActorLocation();
 
-	// Gather sections that were not registered explicitly (greybox test setups).
+	// DES-1: staggered arrivals. A delayed aircraft is parked offscreen until it arrives.
+	bArrived = ArrivalDelay <= 0.f;
+	if (!bArrived)
+	{
+		SetActorHiddenInGame(true);
+		SetActorEnableCollision(false);
+	}
+
+	// SIM-5: radius-gather only claims sections with no explicit owner.
 	for (TActorIterator<AHoldoverSurfaceSection> It(GetWorld()); It; ++It)
 	{
 		AHoldoverSurfaceSection* Section = *It;
-		if (Section && FVector::DistSquared(Section->GetActorLocation(), GetActorLocation()) <= FMath::Square(SectionGatherRadius))
+		if (Section
+			&& Section->OwningAircraft == nullptr
+			&& FVector::DistSquared(Section->GetActorLocation(), GetActorLocation()) <= FMath::Square(SectionGatherRadius))
 		{
 			RegisterSection(Section);
 		}
 	}
 
-	UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' registered %d surface sections"), *GetName(), Sections.Num());
+	UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' registered %d surface sections (arrival delay %.1fs)"),
+		*GetName(), Sections.Num(), ArrivalDelay);
 }
 
 void AHoldoverAircraft::Tick(float DeltaSeconds)
@@ -117,20 +170,55 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// DES-1: staggered arrival — the plane appears once the shift clock passes its delay.
+	if (!bArrived)
+	{
+		const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>();
+		const float Elapsed = GS ? (GS->GetShiftDuration() - GS->ShiftTimeRemaining) : 0.f;
+		if (Elapsed >= ArrivalDelay)
+		{
+			bArrived = true;
+			SetActorHiddenInGame(false);
+			SetActorEnableCollision(true);
+			ArrivalTime = GetWorld()->GetTimeSeconds();
+			UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' has ARRIVED"), *GetName());
+			if (AHoldoverGameState* GSW = GetWorld()->GetGameState<AHoldoverGameState>())
+			{
+				GSW->DispatchEvent(EDispatchEvent::AircraftArrival);
+			}
+		}
+		return;
+	}
+
 	float Weather = 0.f;
 	if (const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>())
 	{
 		Weather = GS->WeatherSeverity;
+
+		// DES-5: sync tuning from the shift data asset (local defaults as fallback).
+		HoldoverDuration = GS->GetHoldoverDuration();
+		WeatherBurnMultiplier = GS->GetWeatherBurnMultiplier();
+		ProtectionDegradationPerSecond = GS->GetProtectionDegradationPerSecond();
+		HoldoverDegradationScale = GS->GetHoldoverDegradationScale();
+		ReContaminationRatePerSecond = GS->GetReContaminationRatePerSecond();
+		ReContaminationProtectionThreshold = GS->GetReContaminationProtectionThreshold();
 	}
 	SimulateTreatment(DeltaSeconds, Weather);
 }
 
 void AHoldoverAircraft::RegisterSection(AHoldoverSurfaceSection* Section)
 {
-	if (Section && !Sections.Contains(Section))
+	if (!Section || Sections.Contains(Section))
 	{
-		Sections.Add(Section);
+		return;
 	}
+	// SIM-5: never steal a section explicitly owned by another aircraft.
+	if (Section->OwningAircraft != nullptr && Section->OwningAircraft != this)
+	{
+		return;
+	}
+	Sections.Add(Section);
+	Section->OwningAircraft = this;
 }
 
 float AHoldoverAircraft::GetOverallCleanliness() const
@@ -207,13 +295,29 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	}
 	const float Weather = FMath::Clamp(WeatherSeverity, 0.f, 1.f);
 
-	// 1. Weather degrades protection on every section.
-	const float Degradation = ProtectionDegradationPerSecond * Weather * DeltaSeconds;
+	// SIM-2: degradation is paused (or slowed) during an active holdover so
+	// expiry is the clock players actually fight, not the abort.
+	const bool bInHoldover = (HoldoverState == EHoldoverState::HoldoverActive);
+	const float DegScale = bInHoldover ? HoldoverDegradationScale : 1.f;
+	const float Degradation = ProtectionDegradationPerSecond * Weather * DegScale * DeltaSeconds;
 	for (AHoldoverSurfaceSection* Section : Sections)
 	{
 		if (Section)
 		{
 			Section->ApplyDegradation(Degradation);
+		}
+	}
+
+	// SIM-3: precipitation re-contaminates unprotected sections.
+	if (ReContaminationRatePerSecond > 0.f && Weather > 0.f)
+	{
+		const float Contamination = ReContaminationRatePerSecond * Weather * DeltaSeconds;
+		for (AHoldoverSurfaceSection* Section : Sections)
+		{
+			if (Section && Section->ProtectionPercent < ReContaminationProtectionThreshold)
+			{
+				Section->ApplyContamination(Contamination);
+			}
 		}
 	}
 
@@ -227,7 +331,7 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 		UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover started (%.0fs)"), *GetName(), HoldoverRemaining);
 		if (AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr)
 		{
-			GS->AddDispatch(TEXT("Aircraft treated. Holdover running - clear it for departure!"));
+			GS->DispatchEvent(EDispatchEvent::HoldoverStarted);
 		}
 	}
 
@@ -236,10 +340,14 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	{
 		if (!AreAllSectionsCleanAndProtected())
 		{
-			// Degradation forced retreatment mid-holdover.
+			// SIM-2: degradation forced retreatment mid-holdover — abort costs something.
 			HoldoverState = EHoldoverState::Incomplete;
 			HoldoverRemaining = 0.f;
 			UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover aborted (treatment lost)"), *GetName());
+			if (AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr)
+			{
+				GS->RegisterPenalty(GS->GetHoldoverAbortPenalty(), TEXT("Holdover aborted"));
+			}
 		}
 		else
 		{
@@ -259,7 +367,7 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 				UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover EXPIRED — retreatment required"), *GetName());
 				if (AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr)
 				{
-					GS->AddDispatch(TEXT("HOLDOVER EXPIRED! Protection is gone - retreat the aircraft."));
+					GS->DispatchEvent(EDispatchEvent::HoldoverExpired);
 				}
 			}
 		}
@@ -279,9 +387,16 @@ void AHoldoverAircraft::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
 	DOREPLIFETIME(AHoldoverAircraft, HoldoverState);
 	DOREPLIFETIME(AHoldoverAircraft, HoldoverRemaining);
 	DOREPLIFETIME(AHoldoverAircraft, bDeparted);
+	DOREPLIFETIME(AHoldoverAircraft, bArrived);
 }
 
 void AHoldoverAircraft::OnRep_Holdover()
 {
 	// HUD reads the replicated values directly.
+}
+
+void AHoldoverAircraft::OnRep_Arrived()
+{
+	SetActorHiddenInGame(!bArrived);
+	SetActorEnableCollision(bArrived);
 }

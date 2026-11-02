@@ -7,6 +7,7 @@
 #include "HoldoverAircraft.h"
 #include "HoldoverCharacter.h"
 #include "HoldoverGameState.h"
+#include "HoldoverPlayerState.h"
 #include "HoldoverSprayComponent.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
@@ -26,7 +27,8 @@ AHoldoverTestInteractable::AHoldoverTestInteractable()
 
 FText AHoldoverTestInteractable::GetInteractionPrompt_Implementation() const
 {
-	return FText::FromString(TEXT("Press E - Test Interact"));
+	const FString FluidName = StationFluidType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV");
+	return FText::FromString(FString::Printf(TEXT("Press E - Refill %s"), *FluidName));
 }
 
 void AHoldoverTestInteractable::Interact_Implementation(AActor* Interactor)
@@ -34,12 +36,12 @@ void AHoldoverTestInteractable::Interact_Implementation(AActor* Interactor)
 	UE_LOG(LogHoldover, Display, TEXT("TestInteractable '%s' interacted by '%s'"), *GetName(),
 		Interactor ? *Interactor->GetName() : TEXT("null"));
 
-	// Greybox behaviour: refills the interactor's tanks (Phase 4 turns this into a real refill station).
+	// DES-2: timed refill of the station's fluid type (one-tank rule).
 	if (AHoldoverCharacter* Character = Cast<AHoldoverCharacter>(Interactor))
 	{
 		if (UHoldoverSprayComponent* Spray = Character->GetSprayComponent())
 		{
-			Spray->RefillTanks();
+			Spray->BeginRefill(StationFluidType);
 		}
 	}
 

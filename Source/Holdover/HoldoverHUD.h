@@ -7,8 +7,9 @@
 #include "HoldoverHUD.generated.h"
 
 class AHoldoverSurfaceSection;
+class UHoldoverHUDWidget;
 
-/** Greybox HUD: centre reticle, interaction prompt, treatment progress, spray placeholder. */
+/** Greybox HUD: canvas reticle/prompt + a UMG panel set (see UHoldoverHUDWidget). */
 UCLASS()
 class HOLDOVER_API AHoldoverHUD : public AHUD
 {
@@ -19,5 +20,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Interaction")
 	FText InteractionPrompt;
 
+	virtual void BeginPlay() override;
 	virtual void DrawHUD() override;
+
+	/** D1-D3: toggle the field manual overlay (tutorial / credits / legal / feedback). */
+	void ToggleInfoPanel();
+
+protected:
+	UPROPERTY(Transient)
+	UHoldoverHUDWidget* HUDWidget;
 };

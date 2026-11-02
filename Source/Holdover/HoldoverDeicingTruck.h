@@ -43,11 +43,19 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Boom")
 	float MaxExtension = 900.f;
 
+	/** MP-7: boom yaw is clamped to +/- MaxAbsYaw. */
+	UPROPERTY(EditDefaultsOnly, Category = "Boom")
+	float MaxAbsYaw = 120.f;
+
 	UPROPERTY(EditDefaultsOnly, Category = "Boom")
 	float YawSpeed = 60.f;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Boom")
 	float ExtensionSpeed = 300.f;
+
+	/** G-2: token-bucket burst — seconds of motion one request may cover. */
+	UPROPERTY(EditDefaultsOnly, Category = "Boom")
+	float BoomBurstSeconds = 0.25f;
 
 	/** Arcade driving is modular: keep false for the parked-truck demo. */
 	UPROPERTY(EditDefaultsOnly, Category = "Driving")
@@ -55,9 +63,18 @@ public:
 
 	/** Clamped, pure boom math (testable). */
 	static float ClampExtension(float Extension, float MinValue, float MaxValue);
+	static float ClampBoomYaw(float Yaw, float MaxAbsYawValue);
 
 	UFUNCTION(BlueprintCallable, Category = "Boom")
 	void SetBoom(float InYaw, float InExtension);
+
+	/**
+	 * Server-side handler for a boom request (MP-7/G-2 rate validation lives
+	 * here; the ServerSetBoom RPC delegates to this). Public so world-based
+	 * automation tests can exercise the exact validation path a remote client
+	 * hits (PROC-1). `NowSeconds` < 0 uses world time (tests inject their own).
+	 */
+	void ApplyBoomRequest(float InYaw, float InExtension, double NowSeconds = -1.0);
 
 	// --- occupancy ---
 	UFUNCTION(BlueprintCallable, Category = "Occupancy")
@@ -69,11 +86,38 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Occupancy")
 	bool IsOccupied() const { return OccupantCharacter != nullptr; }
 
+	AActor* GetOccupant() const { return OccupantCharacter.Get(); }
+
+	/** MP-3: restore the hidden occupant and clear occupancy. Idempotent; does not
+	 *  possess (exit owns re-possession). Called from Logout/unpossess/EndPlay paths. */
+	void EvictOccupant();
+
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
+	virtual void UnPossessed() override;
+	virtual void OnRep_Controller() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 protected:
-	UFUNCTION(Server, Reliable)
+	// Owner-safe spray cleanup on every possession-lifetime edge (P7-2).
+	void StopSprayLocal();
+
+	/** MP-9: mapping-context removal on possession end. */
+	void RemoveTruckInputContext();
+
+	// G-2: server-side token bucket for boom rate validation (not replicated).
+	float BoomYawAllowance = 0.f;
+	float BoomExtAllowance = 0.f;
+	double LastBoomRateTime = -1.0;
+
+	UPROPERTY(Transient)
+	class UInputMappingContext* TruckContext;
+
+	UPROPERTY(Transient)
+	TWeakObjectPtr<class UEnhancedInputLocalPlayerSubsystem> CachedInputSubsystem;
+	// MP-7: unreliable + rate-validated on the server (a reliable RPC per held key
+	// frame risks reliable-buffer overflow disconnects).
+	UFUNCTION(Server, Unreliable)
 	void ServerSetBoom(float InYaw, float InExtension);
 
 	UFUNCTION(Server, Reliable)
@@ -126,6 +170,7 @@ protected:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	UFloatingPawnMovement* Movement;
 
-	UPROPERTY(Transient)
+	/** MP-6: replicated so every client sees occupancy (prompts) and can sync state. */
+	UPROPERTY(Replicated)
 	TWeakObjectPtr<AActor> OccupantCharacter;
 };

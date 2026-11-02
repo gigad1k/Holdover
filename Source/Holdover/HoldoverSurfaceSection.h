@@ -4,21 +4,38 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "HoldoverInteractableInterface.h"
 #include "HoldoverSurfaceSection.generated.h"
 
 class UStaticMeshComponent;
+class AHoldoverAircraft;
 
 /**
  * One independently trackable aircraft surface panel.
  * Treatment state is server-authoritative and replicated.
  */
 UCLASS()
-class HOLDOVER_API AHoldoverSurfaceSection : public AActor
+class HOLDOVER_API AHoldoverSurfaceSection : public AActor, public IHoldoverInteractableInterface
 {
 	GENERATED_BODY()
 
 public:
 	AHoldoverSurfaceSection();
+
+	// The aircraft has no traceable collision, so sections forward the departure
+	// interact to their nearest aircraft (MP-5 end-to-end path).
+	virtual FText GetInteractionPrompt_Implementation() const override;
+	virtual void Interact_Implementation(AActor* Interactor) override;
+
+	AHoldoverAircraft* FindOwningAircraft() const;
+
+	/**
+	 * Explicit owner. When set (in-editor or at spawn) this section belongs to
+	 * exactly one aircraft regardless of distance. When null the radius-gather
+	 * fallback in AHoldoverAircraft::BeginPlay may claim it (SIM-5).
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Treatment")
+	TObjectPtr<AHoldoverAircraft> OwningAircraft;
 
 	/** e.g. "Nose", "LeftWing" — labels are the source of truth in greybox. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Treatment")
@@ -52,6 +69,9 @@ public:
 
 	/** Server-side: weather-driven protection loss. Returns the amount actually lost. */
 	float ApplyDegradation(float Amount);
+
+	/** SIM-3: server-side cleanliness loss from precipitation. Returns the amount lost. */
+	float ApplyContamination(float Amount);
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 

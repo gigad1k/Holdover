@@ -4,18 +4,21 @@
 #include "Components/BoxComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "Engine/NetConnection.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/FloatingPawnMovement.h"
 #include "GameFramework/PlayerController.h"
 #include "Holdover.h"
+#include "HoldoverCharacter.h"
 #include "HoldoverSprayComponent.h"
 #include "InputAction.h"
 #include "InputActionValue.h"
 #include "InputMappingContext.h"
 #include "Net/UnrealNetwork.h"
 #include "UObject/ConstructorHelpers.h"
+#include "Misc/Paths.h"
 
 AHoldoverDeicingTruck::AHoldoverDeicingTruck()
 {
@@ -68,6 +71,9 @@ AHoldoverDeicingTruck::AHoldoverDeicingTruck()
 	Nozzle->SetupAttachment(Basket);
 
 	SprayComponent = CreateDefaultSubobject<UHoldoverSprayComponent>(TEXT("Spray Component"));
+	// MP-4: the nozzle is the spray origin on EVERY instance (server + owning
+	// clients), so remote occupants' targeting traces come from the basket too.
+	SprayComponent->SetSprayOrigin(Nozzle);
 	Movement = CreateDefaultSubobject<UFloatingPawnMovement>(TEXT("Movement"));
 	Movement->SetUpdatedComponent(Body);
 }
@@ -77,9 +83,14 @@ float AHoldoverDeicingTruck::ClampExtension(float Extension, float MinValue, flo
 	return FMath::Clamp(Extension, FMath::Min(MinValue, MaxValue), FMath::Max(MinValue, MaxValue));
 }
 
+float AHoldoverDeicingTruck::ClampBoomYaw(float Yaw, float MaxAbsYawValue)
+{
+	return FMath::Clamp(Yaw, -FMath::Abs(MaxAbsYawValue), FMath::Abs(MaxAbsYawValue));
+}
+
 void AHoldoverDeicingTruck::SetBoom(float InYaw, float InExtension)
 {
-	BoomYaw = InYaw;
+	BoomYaw = ClampBoomYaw(InYaw, MaxAbsYaw);
 	BoomExtension = ClampExtension(InExtension, MinExtension, MaxExtension);
 	ApplyBoomTransform();
 }
@@ -119,8 +130,11 @@ bool AHoldoverDeicingTruck::TryEnter(AActor* Interactor)
 
 	OccupantCharacter = Pawn;
 	Pawn->GetController()->Possess(this);
-	Pawn->SetActorHiddenInGame(true);
-	Pawn->SetActorEnableCollision(false);
+	// MP-6: replicated hidden/collision state (raw SetActorEnableCollision does not replicate).
+	if (AHoldoverCharacter* HC = Cast<AHoldoverCharacter>(Pawn))
+	{
+		HC->SetVehicleHidden(true);
+	}
 	if (SprayComponent)
 	{
 		SprayComponent->SetSprayOrigin(Nozzle);
@@ -131,6 +145,7 @@ bool AHoldoverDeicingTruck::TryEnter(AActor* Interactor)
 
 void AHoldoverDeicingTruck::TryExit()
 {
+	UE_LOG(LogHoldover, Display, TEXT("TryExit: %s authority=%d"), *GetName(), HasAuthority() ? 1 : 0);
 	if (HasAuthority())
 	{
 		ServerExit_Implementation();
@@ -143,6 +158,8 @@ void AHoldoverDeicingTruck::TryExit()
 
 void AHoldoverDeicingTruck::ServerExit_Implementation()
 {
+	UE_LOG(LogHoldover, Display, TEXT("ServerExit arrived: %s occupied=%d controller=%s"),
+		*GetName(), OccupantCharacter.IsValid() ? 1 : 0, *GetNameSafe(GetController()));
 	APawn* Pawn = Cast<APawn>(OccupantCharacter.Get());
 	if (Pawn)
 	{
@@ -150,8 +167,10 @@ void AHoldoverDeicingTruck::ServerExit_Implementation()
 		{
 			PController->Possess(Pawn);
 		}
-		Pawn->SetActorHiddenInGame(false);
-		Pawn->SetActorEnableCollision(true);
+		if (AHoldoverCharacter* HC = Cast<AHoldoverCharacter>(Pawn))
+		{
+			HC->SetVehicleHidden(false);
+		}
 		UE_LOG(LogHoldover, Display, TEXT("Truck '%s' exited back to '%s'"), *GetName(), *Pawn->GetName());
 	}
 	OccupantCharacter.Reset();
@@ -162,6 +181,62 @@ void AHoldoverDeicingTruck::ServerExit_Implementation()
 	}
 }
 
+void AHoldoverDeicingTruck::StopSprayLocal()
+{
+	if (SprayComponent)
+	{
+		SprayComponent->SetSpraying(false);
+		SprayComponent->SetSprayOrigin(nullptr);
+	}
+}
+
+void AHoldoverDeicingTruck::EvictOccupant()
+{
+	UE_LOG(LogHoldover, Display, TEXT("EvictOccupant: %s world=%s had=%d"), *GetName(),
+		GetWorld() ? *GetWorld()->GetName() : TEXT("null"), OccupantCharacter.IsValid() ? 1 : 0);
+	if (APawn* Pawn = Cast<APawn>(OccupantCharacter.Get()))
+	{
+		if (AHoldoverCharacter* HC = Cast<AHoldoverCharacter>(Pawn))
+		{
+			HC->SetVehicleHidden(false);
+		}
+	}
+	OccupantCharacter.Reset();
+	StopSprayLocal();
+}
+
+void AHoldoverDeicingTruck::UnPossessed()
+{
+	// P7-2/MP-9: kill local spray loop + input context on any possession-lifetime edge.
+	// NOTE: the engine also calls UnPossessed inside Possess() during ENTRY (callstack
+	// verified 2026-10-30) — so this must NOT evict the occupant here. Departure
+	// eviction lives in ServerExit, GameMode::Logout and EndPlay.
+	StopSprayLocal();
+	RemoveTruckInputContext();
+	Super::UnPossessed();
+}
+
+void AHoldoverDeicingTruck::OnRep_Controller()
+{
+	// Fires on the owning client on possession CHANGE — including arrival (entry).
+	// P7-2/MP-9: always kill the local spray loop + input context; evict only when
+	// possession actually LEFT (controller cleared).
+	StopSprayLocal();
+	RemoveTruckInputContext();
+	if (!GetController())
+	{
+		EvictOccupant();
+	}
+	Super::OnRep_Controller();
+}
+
+void AHoldoverDeicingTruck::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	EvictOccupant();
+	RemoveTruckInputContext();
+	Super::EndPlay(EndPlayReason);
+}
+
 void AHoldoverDeicingTruck::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
@@ -169,7 +244,39 @@ void AHoldoverDeicingTruck::Tick(float DeltaSeconds)
 
 void AHoldoverDeicingTruck::ServerSetBoom_Implementation(float InYaw, float InExtension)
 {
-	SetBoom(InYaw, InExtension);
+	ApplyBoomRequest(InYaw, InExtension);
+}
+
+void AHoldoverDeicingTruck::ApplyBoomRequest(float InYaw, float InExtension, double NowSeconds)
+{
+	// G-2: token-bucket rate limit — the boom moves at most YawSpeed/
+	// ExtensionSpeed per second of ELAPSED server time, with up to
+	// BoomBurstSeconds of motion banked for packet bursts. A same-frame RPC
+	// flood (120 unreliable requests/sec) cannot overspeed it; teleports stay
+	// rejected (MP-7).
+	const double Now = NowSeconds >= 0.0
+		? NowSeconds
+		: (GetWorld() ? (double)GetWorld()->GetTimeSeconds() : 0.0);
+	const float BurstYaw = YawSpeed * BoomBurstSeconds;
+	const float BurstExt = ExtensionSpeed * BoomBurstSeconds;
+	if (LastBoomRateTime < 0.0)
+	{
+		BoomYawAllowance = BurstYaw;
+		BoomExtAllowance = BurstExt;
+	}
+	else
+	{
+		const float Dt = (float)FMath::Clamp<double>(Now - LastBoomRateTime, 0.0, (double)BoomBurstSeconds);
+		BoomYawAllowance = FMath::Min(BoomYawAllowance + YawSpeed * Dt, BurstYaw);
+		BoomExtAllowance = FMath::Min(BoomExtAllowance + ExtensionSpeed * Dt, BurstExt);
+	}
+	LastBoomRateTime = Now;
+
+	const float YawDelta = FMath::Clamp(InYaw - BoomYaw, -BoomYawAllowance, BoomYawAllowance);
+	const float ExtDelta = FMath::Clamp(InExtension - BoomExtension, -BoomExtAllowance, BoomExtAllowance);
+	BoomYawAllowance -= FMath::Abs(YawDelta);
+	BoomExtAllowance -= FMath::Abs(ExtDelta);
+	SetBoom(BoomYaw + YawDelta, BoomExtension + ExtDelta);
 }
 
 void AHoldoverDeicingTruck::OnRep_Boom()
@@ -220,6 +327,11 @@ void AHoldoverDeicingTruck::SprayStopped(const FInputActionValue& Value)
 
 void AHoldoverDeicingTruck::ExitPressed(const FInputActionValue& Value)
 {
+	// Owner-side: kill the looping spray hiss before the server handles the exit.
+	if (SprayComponent)
+	{
+		SprayComponent->SetSpraying(false);
+	}
 	TryExit();
 }
 
@@ -265,57 +377,79 @@ void AHoldoverDeicingTruck::SetupPlayerInputComponent(UInputComponent* PlayerInp
 		return;
 	}
 
-	// UE 5.8 has no BindKey: runtime actions + mapping context (same pattern as the character).
-	UInputAction* YawLeft = NewObject<UInputAction>(this, TEXT("IA_BoomYawLeft_Transient"));
-	UInputAction* YawRight = NewObject<UInputAction>(this, TEXT("IA_BoomYawRight_Transient"));
-	UInputAction* Extend = NewObject<UInputAction>(this, TEXT("IA_BoomExtend_Transient"));
-	UInputAction* Retract = NewObject<UInputAction>(this, TEXT("IA_BoomRetract_Transient"));
-	UInputAction* Spray = NewObject<UInputAction>(this, TEXT("IA_TruckSpray_Transient"));
-	UInputAction* Exit = NewObject<UInputAction>(this, TEXT("IA_TruckExit_Transient"));
-	UInputAction* Fwd = NewObject<UInputAction>(this, TEXT("IA_DriveFwd_Transient"));
-	UInputAction* Back = NewObject<UInputAction>(this, TEXT("IA_DriveBack_Transient"));
-	UInputAction* TurnL = NewObject<UInputAction>(this, TEXT("IA_DriveTurnL_Transient"));
-	UInputAction* TurnR = NewObject<UInputAction>(this, TEXT("IA_DriveTurnR_Transient"));
+	// MP-9: create actions/context and bind ONCE per truck — re-possession must not
+	// pile up mapping contexts and duplicate bindings.
+	if (!TruckContext)
+	{
+		UInputAction* YawLeft = NewObject<UInputAction>(this, TEXT("IA_BoomYawLeft_Transient"));
+		UInputAction* YawRight = NewObject<UInputAction>(this, TEXT("IA_BoomYawRight_Transient"));
+		UInputAction* Extend = NewObject<UInputAction>(this, TEXT("IA_BoomExtend_Transient"));
+		UInputAction* Retract = NewObject<UInputAction>(this, TEXT("IA_BoomRetract_Transient"));
+		UInputAction* Spray = NewObject<UInputAction>(this, TEXT("IA_TruckSpray_Transient"));
+		UInputAction* Exit = NewObject<UInputAction>(this, TEXT("IA_TruckExit_Transient"));
+		UInputAction* Fwd = NewObject<UInputAction>(this, TEXT("IA_DriveFwd_Transient"));
+		UInputAction* Back = NewObject<UInputAction>(this, TEXT("IA_DriveBack_Transient"));
+		UInputAction* TurnL = NewObject<UInputAction>(this, TEXT("IA_DriveTurnL_Transient"));
+		UInputAction* TurnR = NewObject<UInputAction>(this, TEXT("IA_DriveTurnR_Transient"));
 
-	UInputMappingContext* IMC = NewObject<UInputMappingContext>(this, TEXT("IMC_Truck_Transient"));
-	IMC->MapKey(YawLeft, EKeys::A);
-	IMC->MapKey(YawRight, EKeys::D);
-	IMC->MapKey(Extend, EKeys::W);
-	IMC->MapKey(Retract, EKeys::S);
-	IMC->MapKey(Spray, EKeys::LeftMouseButton);
-	IMC->MapKey(Exit, EKeys::E);
-	IMC->MapKey(Fwd, EKeys::Up);
-	IMC->MapKey(Back, EKeys::Down);
-	IMC->MapKey(TurnL, EKeys::Left);
-	IMC->MapKey(TurnR, EKeys::Right);
+		TruckContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Truck_Transient"));
+		TruckContext->MapKey(YawLeft, EKeys::A);
+		TruckContext->MapKey(YawRight, EKeys::D);
+		TruckContext->MapKey(Extend, EKeys::W);
+		TruckContext->MapKey(Retract, EKeys::S);
+		TruckContext->MapKey(Spray, EKeys::LeftMouseButton);
+		TruckContext->MapKey(Exit, EKeys::E);
+		TruckContext->MapKey(Fwd, EKeys::Up);
+		TruckContext->MapKey(Back, EKeys::Down);
+		TruckContext->MapKey(TurnL, EKeys::Left);
+		TruckContext->MapKey(TurnR, EKeys::Right);
 
+		EIC->BindAction(YawLeft, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::BoomYawLeft);
+		EIC->BindAction(YawRight, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::BoomYawRight);
+		EIC->BindAction(Extend, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::BoomExtend);
+		EIC->BindAction(Retract, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::BoomRetract);
+		EIC->BindAction(Spray, ETriggerEvent::Started, this, &AHoldoverDeicingTruck::SprayStarted);
+		EIC->BindAction(Spray, ETriggerEvent::Completed, this, &AHoldoverDeicingTruck::SprayStopped);
+		EIC->BindAction(Exit, ETriggerEvent::Started, this, &AHoldoverDeicingTruck::ExitPressed);
+		EIC->BindAction(Fwd, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveForward);
+		EIC->BindAction(Back, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveBackward);
+		EIC->BindAction(TurnL, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveTurnLeft);
+		EIC->BindAction(TurnR, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveTurnRight);
+	}
+
+	// MP-9: priority 200 — the truck context outranks the on-foot context (100).
 	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
 		if (ULocalPlayer* LP = PC->GetLocalPlayer())
 		{
 			if (UEnhancedInputLocalPlayerSubsystem* Sub = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
 			{
-				Sub->AddMappingContext(IMC, 100);
+				CachedInputSubsystem = Sub;
+				Sub->RemoveMappingContext(TruckContext);
+				Sub->AddMappingContext(TruckContext, 200);
 			}
 		}
 	}
+}
 
-	EIC->BindAction(YawLeft, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::BoomYawLeft);
-	EIC->BindAction(YawRight, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::BoomYawRight);
-	EIC->BindAction(Extend, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::BoomExtend);
-	EIC->BindAction(Retract, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::BoomRetract);
-	EIC->BindAction(Spray, ETriggerEvent::Started, this, &AHoldoverDeicingTruck::SprayStarted);
-	EIC->BindAction(Spray, ETriggerEvent::Completed, this, &AHoldoverDeicingTruck::SprayStopped);
-	EIC->BindAction(Exit, ETriggerEvent::Started, this, &AHoldoverDeicingTruck::ExitPressed);
-	EIC->BindAction(Fwd, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveForward);
-	EIC->BindAction(Back, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveBackward);
-	EIC->BindAction(TurnL, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveTurnLeft);
-	EIC->BindAction(TurnR, ETriggerEvent::Triggered, this, &AHoldoverDeicingTruck::DriveTurnRight);
+void AHoldoverDeicingTruck::RemoveTruckInputContext()
+{
+	if (!TruckContext)
+	{
+		return;
+	}
+	if (UEnhancedInputLocalPlayerSubsystem* Sub = CachedInputSubsystem.Get())
+	{
+		Sub->RemoveMappingContext(TruckContext);
+	}
+	CachedInputSubsystem.Reset();
 }
 
 void AHoldoverDeicingTruck::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(AHoldoverDeicingTruck, BoomYaw);
-	DOREPLIFETIME(AHoldoverDeicingTruck, BoomExtension);
+	// MP-7: skip the owner — it predicts the boom locally and must not snap back.
+	DOREPLIFETIME_CONDITION(AHoldoverDeicingTruck, BoomYaw, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(AHoldoverDeicingTruck, BoomExtension, COND_SkipOwner);
+	DOREPLIFETIME(AHoldoverDeicingTruck, OccupantCharacter);
 }

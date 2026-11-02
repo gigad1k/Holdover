@@ -4,6 +4,7 @@ Intermediate/
 Saved/
 DerivedDataCache/
 Build/
+Builds/
 .vs/
 *.sln*
 *.VC.db
@@ -16,3 +17,7 @@ Build/
 
 # local debug scripts
 Tools/probe_*.py
+
+# Python
+__pycache__/
+*.pyc

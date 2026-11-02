@@ -2,11 +2,15 @@
 
 #include "HoldoverSprayComponent.h"
 #include "Camera/CameraComponent.h"
+#include "Components/AudioComponent.h"
+#include "EngineUtils.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "Holdover.h"
+#include "HoldoverAudioLibrary.h"
 #include "HoldoverCharacter.h"
 #include "HoldoverSurfaceSection.h"
+#include "HoldoverTestInteractable.h"
 #include "Net/UnrealNetwork.h"
 
 UHoldoverSprayComponent::UHoldoverSprayComponent()
@@ -19,19 +23,40 @@ void UHoldoverSprayComponent::SetSpraying(bool bEnabled)
 {
 	bSpraying = bEnabled;
 	RequestAccumulator = 0.f;
+
+	// Cosmetic spray hiss on the owning client only. The stop is unconditional so
+	// server-side stops are harmless no-ops and owner-side stops always land.
+	if (bEnabled)
+	{
+		const APawn* OwnerPawn = Cast<APawn>(GetOwner());
+		if (OwnerPawn && OwnerPawn->IsLocallyControlled() && !HissComponent)
+		{
+			HissComponent = UHoldoverAudioLibrary::Play2D(GetOwner(), FName("spray_hiss"), 0.9f, true);
+			UE_LOG(LogHoldover, Display, TEXT("spray hiss start (%s)"), *GetNameSafe(GetOwner()));
+		}
+	}
+	else if (HissComponent)
+	{
+		HissComponent->Stop();
+		HissComponent = nullptr;
+		UE_LOG(LogHoldover, Display, TEXT("spray hiss stop (%s)"), *GetNameSafe(GetOwner()));
+	}
 }
 
-void UHoldoverSprayComponent::ToggleActiveFluid()
+void UHoldoverSprayComponent::BeginRefill(EHoldoverFluidType NewType)
 {
-	ActiveFluidType = (ActiveFluidType == EHoldoverFluidType::TypeI)
-		? EHoldoverFluidType::TypeIV
-		: EHoldoverFluidType::TypeI;
+	// Owner sends the request; the server validates and starts the timed refill.
+	ServerBeginRefill(NewType);
 }
 
-void UHoldoverSprayComponent::RefillTanks()
+float UHoldoverSprayComponent::GetRefillProgress() const
 {
-	TypeIFluid = FluidCapacity;
-	TypeIVFluid = FluidCapacity;
+	const float Duration = GetRefillDuration();
+	if (!bRefilling || Duration <= 0.f)
+	{
+		return bRefilling ? 1.f : 0.f;
+	}
+	return 1.f - (RefillTimeRemaining / Duration);
 }
 
 bool UHoldoverSprayComponent::ApplySpray(AHoldoverSurfaceSection* Target, float DeltaSeconds)
@@ -41,14 +66,14 @@ bool UHoldoverSprayComponent::ApplySpray(AHoldoverSurfaceSection* Target, float 
 		return false;
 	}
 
-	if (ActiveFluidType == EHoldoverFluidType::TypeI)
+	if (CarriedFluidType == EHoldoverFluidType::TypeI)
 	{
-		if (TypeIFluid <= 0.f)
+		if (FluidLevel <= 0.f)
 		{
 			return false;
 		}
-		Target->ApplyCleaning(CleanRatePerSecond * DeltaSeconds);
-		TypeIFluid = FMath::Max(0.f, TypeIFluid - TypeIUsePerSecond * DeltaSeconds);
+		Target->ApplyCleaning(GetCleanRate() * DeltaSeconds);
+		FluidLevel = FMath::Max(0.f, FluidLevel - GetTypeIUseRate() * DeltaSeconds);
 		return true;
 	}
 
@@ -58,18 +83,34 @@ bool UHoldoverSprayComponent::ApplySpray(AHoldoverSurfaceSection* Target, float 
 		UE_LOG(LogHoldover, Verbose, TEXT("Type IV rejected (section not clean): %s"), *Target->GetName());
 		return false;
 	}
-	if (TypeIVFluid <= 0.f)
+	if (FluidLevel <= 0.f)
 	{
 		return false;
 	}
-	Target->ApplyProtection(ProtectRatePerSecond * DeltaSeconds);
-	TypeIVFluid = FMath::Max(0.f, TypeIVFluid - TypeIVUsePerSecond * DeltaSeconds);
+	Target->ApplyProtection(GetProtectRate() * DeltaSeconds);
+	FluidLevel = FMath::Max(0.f, FluidLevel - GetTypeIVUseRate() * DeltaSeconds);
 	return true;
 }
 
 void UHoldoverSprayComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	// Timed refill countdown (server-driven).
+	if (bRefilling && GetOwner() && GetOwner()->HasAuthority())
+	{
+		RefillTimeRemaining -= DeltaTime;
+		if (RefillTimeRemaining <= 0.f)
+		{
+			RefillTimeRemaining = 0.f;
+			bRefilling = false;
+			FluidLevel = GetFluidCapacity();
+			UE_LOG(LogHoldover, Display, TEXT("Refill complete (%s) -> %s, %.0f"),
+				*GetNameSafe(GetOwner()),
+				CarriedFluidType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV"),
+				FluidLevel);
+		}
+	}
 
 	const AActor* Owner = GetOwner();
 	const APawn* OwnerPawn = Cast<APawn>(Owner);
@@ -129,55 +170,158 @@ void UHoldoverSprayComponent::UpdateTargetFromTrace()
 
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverSpray), false, Owner);
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, Start + Aim.Vector() * SprayRange, ECC_Visibility, Params))
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, Start + Aim.Vector() * GetSprayRange(), ECC_Visibility, Params))
 	{
 		if (AHoldoverSurfaceSection* Section = Cast<AHoldoverSurfaceSection>(Hit.GetActor()))
 		{
 			CurrentTargetSection = Section;
 
 			// Cosmetic pre-validation hint (the server enforces the real rules).
-			if (ActiveFluidType == EHoldoverFluidType::TypeIV && !Section->IsClean())
+			if (CarriedFluidType == EHoldoverFluidType::TypeIV && !Section->IsClean())
 			{
-				TargetHint = FText::FromString(TEXT("Section not clean - use Type I first"));
+				TargetHint = FText::FromString(TEXT("Section not clean - need Type I crew"));
 			}
-			else if (ActiveFluidType == EHoldoverFluidType::TypeI && TypeIFluid <= 0.f)
+			else if (FluidLevel <= 0.f)
 			{
-				TargetHint = FText::FromString(TEXT("Type I tank empty - refill (E)"));
-			}
-			else if (ActiveFluidType == EHoldoverFluidType::TypeIV && TypeIVFluid <= 0.f)
-			{
-				TargetHint = FText::FromString(TEXT("Type IV tank empty - refill (E)"));
+				TargetHint = FText::FromString(TEXT("Tank empty - refill at station"));
 			}
 		}
 	}
 }
 
+float UHoldoverSprayComponent::ClampSprayDt(float RequestedDt, float Interval)
+{
+	if (RequestedDt <= 0.f || Interval <= 0.f)
+	{
+		return 0.f;
+	}
+	return FMath::Min(RequestedDt, Interval * 2.f);
+}
+
 void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection* Target, float DeltaSeconds)
 {
+	ServerApplySprayRequest(Target, DeltaSeconds);
+}
+
+bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* Target, float DeltaSeconds)
+{
 	AActor* Owner = GetOwner();
-	if (!Owner || !IsValid(Target) || DeltaSeconds <= 0.f)
+	if (!Owner || !IsValid(Target))
 	{
-		return;
+		return false;
 	}
 
-	// Server-side range validation
-	if (FVector::DistSquared(Owner->GetActorLocation(), Target->GetActorLocation()) > FMath::Square(SprayRange * 2.f))
+	// MP-8: never trust client dt — one RPC with dt=1000 must not clean a section.
+	const float Dt = ClampSprayDt(DeltaSeconds, SprayRequestInterval);
+	if (Dt <= 0.f)
+	{
+		return false;
+	}
+
+	// MP-8: measure from the active spray origin (truck nozzle / camera), not the
+	// owner root — full-extension truck sprays are legitimate.
+	FVector Origin = Owner->GetActorLocation();
+	if (USceneComponent* OriginComp = SprayOrigin.Get())
+	{
+		Origin = OriginComp->GetComponentLocation();
+	}
+	else if (const AHoldoverCharacter* Character = Cast<AHoldoverCharacter>(Owner))
+	{
+		if (Character->GetFirstPersonCameraComponent())
+		{
+			Origin = Character->GetFirstPersonCameraComponent()->GetComponentLocation();
+		}
+	}
+
+	if (FVector::DistSquared(Origin, Target->GetActorLocation()) > FMath::Square(GetSprayRange() * 2.f))
 	{
 		UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (out of range): %s -> %s"), *Owner->GetName(), *Target->GetName());
-		return;
+		return false;
 	}
 
-	ApplySpray(Target, DeltaSeconds);
+	// G-3: server-side line of sight — a modified client must not spray through
+	// walls. Same channel the owning client's targeting trace uses, so a target
+	// the client could see always passes here.
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverSprayLOS), false, Owner);
+	Params.AddIgnoredActor(Target);
+	if (Owner->GetWorld()->LineTraceSingleByChannel(Hit, Origin, Target->GetActorLocation(), ECC_Visibility, Params))
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (no line of sight): %s -> %s"), *Owner->GetName(), *Target->GetName());
+		return false;
+	}
+
+	return ApplySpray(Target, Dt);
+}
+
+void UHoldoverSprayComponent::ServerBeginRefill_Implementation(EHoldoverFluidType NewType)
+{
+	ValidateAndBeginRefill(NewType);
+}
+
+bool UHoldoverSprayComponent::ValidateAndBeginRefill(EHoldoverFluidType NewType)
+{
+	AActor* Owner = GetOwner();
+	if (!Owner || !Owner->GetWorld())
+	{
+		return false;
+	}
+
+	// G-1: only two fluid types exist; a garbage enum must not enter replicated state.
+	if (NewType != EHoldoverFluidType::TypeI && NewType != EHoldoverFluidType::TypeIV)
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Refill rejected (invalid fluid type): %s"), *GetNameSafe(Owner));
+		return false;
+	}
+
+	// G-1: a refill in progress cannot be restarted (would refresh the tank early).
+	if (bRefilling)
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Refill rejected (already refilling): %s"), *GetNameSafe(Owner));
+		return false;
+	}
+
+	// G-1: the RPC is client-callable, so station proximity is validated here,
+	// not only on the interact path. Same slack as ServerInteract's range check.
+	bool bNearStation = false;
+	for (TActorIterator<AHoldoverTestInteractable> It(Owner->GetWorld()); It; ++It)
+	{
+		if (FVector::DistSquared(Owner->GetActorLocation(), It->GetActorLocation()) <= FMath::Square(RefillStationRange))
+		{
+			bNearStation = true;
+			break;
+		}
+	}
+	if (!bNearStation)
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Refill rejected (not at a refill station): %s"), *GetNameSafe(Owner));
+		return false;
+	}
+
+	// DES-2: one-tank rule — choosing a fluid at the station replaces whatever
+	// you were carrying. The refill takes RefillDuration seconds.
+	const float Duration = GetRefillDuration();
+	CarriedFluidType = NewType;
+	FluidLevel = 0.f;
+	bRefilling = true;
+	RefillTimeRemaining = Duration;
+	UE_LOG(LogHoldover, Display, TEXT("Refill started (%s) -> %s, %.1fs"),
+		*GetNameSafe(Owner),
+		NewType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV"),
+		Duration);
+	return true;
 }
 
 void UHoldoverSprayComponent::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(UHoldoverSprayComponent, TypeIFluid);
-	DOREPLIFETIME(UHoldoverSprayComponent, TypeIVFluid);
+	DOREPLIFETIME(UHoldoverSprayComponent, FluidLevel);
+	DOREPLIFETIME(UHoldoverSprayComponent, CarriedFluidType);
+	DOREPLIFETIME(UHoldoverSprayComponent, bRefilling);
+	DOREPLIFETIME(UHoldoverSprayComponent, RefillTimeRemaining);
 }
 
 void UHoldoverSprayComponent::OnRep_Fluid()
 {
-	// HUD reads the tank levels directly.
+	// HUD reads the tank level and fluid type directly.
 }

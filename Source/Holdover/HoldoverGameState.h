@@ -4,7 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/GameStateBase.h"
+#include "HoldoverDispatcherLines.h"
 #include "HoldoverGameState.generated.h"
+
+class UHoldoverShiftData;
 
 UENUM(BlueprintType)
 enum class EShiftState : uint8
@@ -26,19 +29,56 @@ class HOLDOVER_API AHoldoverGameState : public AGameStateBase
 public:
 	AHoldoverGameState();
 
-	// --- weather ---
+	// --- weather (SIM-1: squalls and lulls, randomised per shift) ---
 	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Weather")
 	float WeatherSeverity = 0.f;
 
+	/** DES-5: shift tuning data asset. When null, local defaults are used. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shift")
+	TObjectPtr<UHoldoverShiftData> ShiftData;
+
+	// Local fallbacks (used when ShiftData is null).
 	UPROPERTY(EditDefaultsOnly, Category = "Weather")
 	bool bAutoRampWeather = true;
 
 	UPROPERTY(EditDefaultsOnly, Category = "Weather")
 	float WeatherRampPerSecond = 0.01f;
 
+	// SIM-1: squall/lull oscillation state (server-only).
+	float WeatherBaseSeverity = 0.3f;
+	float WeatherPhase = 0.f;
+	float WeatherTime = 0.f;
+
 	void SetWeatherSeverity(float NewSeverity);
 
 	// --- shift ---
+	/** DES-4: current shift number (1-based). Advances on RestartShift. */
+	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Shift")
+	int32 ShiftNumber = 1;
+
+	/** DES-4: escalating shift profiles. When empty, built-in defaults are used. */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Shift")
+	TArray<TObjectPtr<UHoldoverShiftData>> ShiftProfiles;
+
+	/** DES-4: running company ledger (cumulative across shifts). */
+	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Ledger")
+	int32 TotalCompanyPay = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Ledger")
+	int32 TotalCompanyDeductions = 0;
+
+	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Ledger")
+	int32 CompanyLedger = 0;
+
+	/** DES-4: ensure profiles exist (creates built-in defaults if empty). */
+	void EnsureShiftProfiles();
+
+	/** DES-4: get the current shift's tuning (profiles[ShiftNumber-1] or ShiftData). */
+	UHoldoverShiftData* GetCurrentProfile() const;
+
+	/** DES-4: profile display name for the HUD/dispatcher. */
+	FString GetProfileName() const;
+
 	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Shift")
 	EShiftState ShiftState = EShiftState::WaitingToStart;
 
@@ -63,10 +103,11 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_Shift, BlueprintReadOnly, Category = "Shift")
 	bool bShiftPassed = false;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Shift")
+	/** G-5: replicated so late joiners and clients show the same pay rules. */
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Shift")
 	int32 PayPerOnTimeDeparture = 100;
 
-	UPROPERTY(EditDefaultsOnly, Category = "Shift")
+	UPROPERTY(EditDefaultsOnly, Replicated, Category = "Shift")
 	int32 LateDepartureDeduction = 50;
 
 	// --- dispatcher feed ---
@@ -78,12 +119,31 @@ public:
 	void TickShift(float DeltaSeconds);
 	void EndShift();
 
+	/** Duration of the current/last shift (for elapsed-time calculations). */
+	float GetShiftDuration() const { return LastShiftDuration; }
+
+	// --- DES-5: shift tuning accessors (ShiftData with local fallbacks) ---
+	float GetHoldoverDuration() const;
+	float GetWeatherBurnMultiplier() const;
+	float GetProtectionDegradationPerSecond() const;
+	float GetHoldoverDegradationScale() const;
+	float GetReContaminationRatePerSecond() const;
+	float GetReContaminationProtectionThreshold() const;
+	int32 GetHoldoverAbortPenalty() const;
+	float GetPerAircraftDeadlineSeconds() const;
+
+	/** SIM-4: net pay = money - deductions. */
+	int32 GetNetPay() const { return Money - Deductions; }
+
 	/** Starts a fresh shift with the previous duration/quota (repeatable loop). */
 	void RestartShift();
 
-	void RegisterDeparture(bool bOnTime);
-	void RegisterPenalty(int32 Amount, const FString& Reason);
+	void RegisterDeparture(bool bOnTime, class AHoldoverPlayerState* ResponsiblePlayer = nullptr);
+	void RegisterPenalty(int32 Amount, const FString& Reason, class AHoldoverPlayerState* ResponsiblePlayer = nullptr, EDispatchEvent Event = EDispatchEvent::JetBlast);
 	void AddDispatch(const FString& Line);
+
+	/** DES-3: fires a reactive dispatcher line from the bank, tracking repetition. */
+	void DispatchEvent(EDispatchEvent Event, const FString& PlayerName = TEXT(""));
 
 	virtual void Tick(float DeltaSeconds) override;
 
@@ -94,5 +154,11 @@ protected:
 	UFUNCTION()
 	void OnRep_Dispatch();
 
+	/** G-5: replicated — a late joiner computing elapsed = duration - remaining
+	 *  must read the real duration, not the local default. */
+	UPROPERTY(Replicated)
 	float LastShiftDuration = 120.f;
+
+	/** DES-3: per-event repetition counters for the dispatcher line bank. */
+	TMap<EDispatchEvent, int32> EventRepetitionCounts;
 };

@@ -6,6 +6,7 @@
 #include "Engine/LocalPlayer.h"
 #include "InputMappingContext.h"
 #include "HoldoverCameraManager.h"
+#include "HoldoverDeicingTruck.h"
 #include "Blueprint/UserWidget.h"
 #include "Holdover.h"
 #include "Widgets/Input/SVirtualJoystick.h"
@@ -14,6 +15,20 @@ AHoldoverPlayerController::AHoldoverPlayerController()
 {
 	// set the player camera manager class
 	PlayerCameraManagerClass = AHoldoverCameraManager::StaticClass();
+}
+
+void AHoldoverPlayerController::PawnLeavingGame()
+{
+	// MP-3: on disconnect the engine destroys the connection's pawn — when the
+	// driver was in the deicing truck, that pawn is the LEVEL-PLACED truck.
+	// Evict the occupant and detach so the truck survives for everyone else.
+	if (AHoldoverDeicingTruck* Truck = Cast<AHoldoverDeicingTruck>(GetPawn()))
+	{
+		UE_LOG(LogHoldover, Display, TEXT("PawnLeavingGame: saving truck %s (MP-3)"), *GetNameSafe(Truck));
+		Truck->EvictOccupant();
+		UnPossess();
+	}
+	Super::PawnLeavingGame();
 }
 
 void AHoldoverPlayerController::BeginPlay()

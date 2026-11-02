@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
 #include "HoldoverInteractableInterface.h"
+#include "HoldoverPlayerState.h"
 #include "HoldoverTestInteractable.generated.h"
 
 class UStaticMeshComponent;
@@ -24,6 +25,10 @@ public:
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	UStaticMeshComponent* Mesh;
+
+	/** DES-2: which fluid this refill station offers. Place one station per type. */
+	UPROPERTY(EditAnywhere, Category = "Refill")
+	EHoldoverFluidType StationFluidType = EHoldoverFluidType::TypeI;
 
 	/** Toggled on each interaction so the effect is visible in PIE. */
 	UPROPERTY(Transient)

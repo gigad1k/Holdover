@@ -13,9 +13,11 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Holdover.h"
+#include "HoldoverAudioLibrary.h"
 #include "HoldoverHUD.h"
 #include "HoldoverInteractableInterface.h"
 #include "HoldoverSprayComponent.h"
+#include "Net/UnrealNetwork.h"
 
 AHoldoverCharacter::AHoldoverCharacter()
 {
@@ -56,6 +58,24 @@ AHoldoverCharacter::AHoldoverCharacter()
 	// Network: standard replicated character movement for listen-server co-op
 	bReplicates = true;
 	SetReplicatingMovement(true);
+}
+
+void AHoldoverCharacter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	// Capture the movement base once; all speed changes go through SpeedScale (MP-2).
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		BaseWalkSpeed = Move->MaxWalkSpeed;
+	}
+	ApplySpeedScale();
+
+	// Wind ambience for the locally controlled player.
+	if (IsLocallyControlled())
+	{
+		UHoldoverAudioLibrary::Play2D(this, FName("wind_loop"), 0.5f, true);
+	}
 }
 
 void AHoldoverCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -144,40 +164,83 @@ void AHoldoverCharacter::EnsureExtraInputBindings(UInputComponent* InInputCompon
 		InteractAction = NewObject<UInputAction>(this, TEXT("IA_Interact_Transient"));
 		SprayAction = NewObject<UInputAction>(this, TEXT("IA_Spray_Transient"));
 		FluidToggleAction = NewObject<UInputAction>(this, TEXT("IA_FluidToggle_Transient"));
+		InfoAction = NewObject<UInputAction>(this, TEXT("IA_Info_Transient"));
 		HoldoverExtraContext = NewObject<UInputMappingContext>(this, TEXT("IMC_Holdover_Transient"));
 		HoldoverExtraContext->MapKey(SprintAction, EKeys::LeftShift);
 		HoldoverExtraContext->MapKey(InteractAction, EKeys::E);
 		HoldoverExtraContext->MapKey(SprayAction, EKeys::LeftMouseButton);
 		HoldoverExtraContext->MapKey(FluidToggleAction, EKeys::Q);
+		HoldoverExtraContext->MapKey(InfoAction, EKeys::F1);
 
-		if (const APlayerController* PC = Cast<APlayerController>(GetController()))
+		if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InInputComponent))
 		{
-			if (ULocalPlayer* LP = PC->GetLocalPlayer())
-			{
-				if (UEnhancedInputLocalPlayerSubsystem* Sub = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
-				{
-					Sub->AddMappingContext(HoldoverExtraContext, 100);
-				}
-			}
+			EIC->BindAction(SprintAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprintStart);
+			EIC->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprintEnd);
+			EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AHoldoverCharacter::InteractPressed);
+			EIC->BindAction(SprayAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprayStarted);
+			EIC->BindAction(SprayAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprayStopped);
+			EIC->BindAction(FluidToggleAction, ETriggerEvent::Started, this, &AHoldoverCharacter::ToggleFluid);
+			EIC->BindAction(InfoAction, ETriggerEvent::Started, this, &AHoldoverCharacter::ToggleInfoPanel);
 		}
 	}
 
-	if (UEnhancedInputComponent* EIC = Cast<UEnhancedInputComponent>(InInputComponent))
+	// MP-9: (re)apply on possession; removed again in UnPossessed/EndPlay. Priority
+	// 100 on foot — the truck's context takes 200 while possessed. The subsystem is
+	// cached because UnPossessed runs after Controller is already cleared.
+	if (const APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		EIC->BindAction(SprintAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprintStart);
-		EIC->BindAction(SprintAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprintEnd);
-		EIC->BindAction(InteractAction, ETriggerEvent::Started, this, &AHoldoverCharacter::InteractPressed);
-		EIC->BindAction(SprayAction, ETriggerEvent::Started, this, &AHoldoverCharacter::SprayStarted);
-		EIC->BindAction(SprayAction, ETriggerEvent::Completed, this, &AHoldoverCharacter::SprayStopped);
-		EIC->BindAction(FluidToggleAction, ETriggerEvent::Started, this, &AHoldoverCharacter::ToggleFluid);
+		if (ULocalPlayer* LP = PC->GetLocalPlayer())
+		{
+			if (UEnhancedInputLocalPlayerSubsystem* Sub = LP->GetSubsystem<UEnhancedInputLocalPlayerSubsystem>())
+			{
+				CachedInputSubsystem = Sub;
+				Sub->RemoveMappingContext(HoldoverExtraContext);
+				Sub->AddMappingContext(HoldoverExtraContext, 100);
+			}
+		}
 	}
+}
+
+void AHoldoverCharacter::RemoveHoldoverInputContext()
+{
+	if (!HoldoverExtraContext)
+	{
+		return;
+	}
+	if (UEnhancedInputLocalPlayerSubsystem* Sub = CachedInputSubsystem.Get())
+	{
+		Sub->RemoveMappingContext(HoldoverExtraContext);
+	}
+	CachedInputSubsystem.Reset();
+}
+
+void AHoldoverCharacter::UnPossessed()
+{
+	RemoveHoldoverInputContext();
+	Super::UnPossessed();
+}
+
+void AHoldoverCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	RemoveHoldoverInputContext();
+	Super::EndPlay(EndPlayReason);
 }
 
 void AHoldoverCharacter::ToggleFluid(const FInputActionValue& Value)
 {
-	if (SprayComponent)
+	// DES-2 one-tank rule: fluid is chosen at the refill station, not toggled.
+	// Q is reserved for future use (e.g. radio / callout).
+}
+
+void AHoldoverCharacter::ToggleInfoPanel(const FInputActionValue& Value)
+{
+	// D1-D3: local cosmetic only - never touches replicated state.
+	if (APlayerController* PC = Cast<APlayerController>(GetController()))
 	{
-		SprayComponent->ToggleActiveFluid();
+		if (AHoldoverHUD* HUD = Cast<AHoldoverHUD>(PC->GetHUD()))
+		{
+			HUD->ToggleInfoPanel();
+		}
 	}
 }
 
@@ -209,18 +272,84 @@ void AHoldoverCharacter::Tick(float DeltaSeconds)
 
 void AHoldoverCharacter::SprintStart(const FInputActionValue& Value)
 {
-	if (UCharacterMovementComponent* Move = GetCharacterMovement())
-	{
-		Move->MaxWalkSpeed = Move->GetClass()->GetDefaultObject<UCharacterMovementComponent>()->MaxWalkSpeed * SprintSpeedMultiplier;
-	}
+	SetSprintLocal(true);
+	ServerSetSprint(true);
 }
 
 void AHoldoverCharacter::SprintEnd(const FInputActionValue& Value)
 {
+	SetSprintLocal(false);
+	ServerSetSprint(false);
+}
+
+void AHoldoverCharacter::SetSprintLocal(bool bEnabled)
+{
+	bSprinting = bEnabled;
+	RecomputeSpeedScale();
+}
+
+void AHoldoverCharacter::ServerSetSprint_Implementation(bool bEnabled)
+{
+	bSprinting = bEnabled;
+	RecomputeSpeedScale();
+}
+
+void AHoldoverCharacter::SetIceSlowed(bool bSlowed, float Multiplier)
+{
+	IceScale = bSlowed ? Multiplier : 1.f;
+	RecomputeSpeedScale();
+}
+
+float AHoldoverCharacter::ComputeSpeedScale(bool bSprinting, float SprintScale, float IceScale)
+{
+	return (bSprinting ? SprintScale : 1.f) * IceScale;
+}
+
+void AHoldoverCharacter::RecomputeSpeedScale()
+{
+	SpeedScale = ComputeSpeedScale(bSprinting, SprintSpeedMultiplier, IceScale);
+	ApplySpeedScale();
+}
+
+void AHoldoverCharacter::ApplySpeedScale()
+{
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
-		Move->MaxWalkSpeed = Move->GetClass()->GetDefaultObject<UCharacterMovementComponent>()->MaxWalkSpeed;
+		if (BaseWalkSpeed <= 0.f)
+		{
+			BaseWalkSpeed = Move->MaxWalkSpeed;
+		}
+		Move->MaxWalkSpeed = BaseWalkSpeed * SpeedScale;
 	}
+}
+
+void AHoldoverCharacter::OnRep_SpeedScale()
+{
+	ApplySpeedScale();
+}
+
+void AHoldoverCharacter::SetVehicleHidden(bool bHiddenInVehicle)
+{
+	bVehicleHidden = bHiddenInVehicle;
+	ApplyVehicleHidden();
+}
+
+void AHoldoverCharacter::ApplyVehicleHidden()
+{
+	SetActorHiddenInGame(bVehicleHidden);
+	SetActorEnableCollision(!bVehicleHidden);
+}
+
+void AHoldoverCharacter::OnRep_VehicleHidden()
+{
+	ApplyVehicleHidden();
+}
+
+void AHoldoverCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(AHoldoverCharacter, SpeedScale);
+	DOREPLIFETIME(AHoldoverCharacter, bVehicleHidden);
 }
 
 void AHoldoverCharacter::InteractPressed(const FInputActionValue& Value)
@@ -250,6 +379,37 @@ void AHoldoverCharacter::InteractPressed(const FInputActionValue& Value)
 	}
 }
 
+bool AHoldoverCharacter::ValidateInteractTarget(const AActor* Caller, const AActor* Target, float Range)
+{
+	if (!IsValid(Caller) || !IsValid(Target) || !Caller->GetWorld())
+	{
+		return false;
+	}
+
+	// Server-side range validation (generous slack for latency)
+	if (FVector::DistSquared(Caller->GetActorLocation(), Target->GetActorLocation()) > FMath::Square(Range))
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Interact rejected (out of range): %s -> %s"),
+			*Caller->GetName(), *Target->GetName());
+		return false;
+	}
+
+	// G-4: server-side line of sight — an in-range target through a wall must
+	// not interact. Same channel the client trace uses, so a target the client
+	// could see always passes here.
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverInteractLOS), false, Caller);
+	Params.AddIgnoredActor(Target);
+	if (Caller->GetWorld()->LineTraceSingleByChannel(Hit, Caller->GetActorLocation(), Target->GetActorLocation(),
+		ECC_Visibility, Params))
+	{
+		UE_LOG(LogHoldover, Warning, TEXT("Interact rejected (no line of sight): %s -> %s"),
+			*Caller->GetName(), *Target->GetName());
+		return false;
+	}
+	return true;
+}
+
 void AHoldoverCharacter::ServerInteract_Implementation(AActor* Target)
 {
 	if (!IsValid(Target) ||
@@ -258,10 +418,8 @@ void AHoldoverCharacter::ServerInteract_Implementation(AActor* Target)
 		return;
 	}
 
-	// Server-side range validation (generous slack for latency)
-	if (FVector::DistSquared(GetActorLocation(), Target->GetActorLocation()) > FMath::Square(InteractionDistance * 2.f))
+	if (!ValidateInteractTarget(this, Target, InteractionDistance * 2.f))
 	{
-		UE_LOG(LogHoldover, Warning, TEXT("Interact rejected (out of range): %s -> %s"), *GetName(), *Target->GetName());
 		return;
 	}
 
