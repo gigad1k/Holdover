@@ -24,6 +24,12 @@ public:
 	/** Constructor */
 	AHoldoverPlayerController();
 
+	/** MP-3/M8: a level-placed truck must survive disconnect cleanup and the
+	 *  abandoned occupant must not be left as an orphan in the world. This is
+	 *  the hook where connection cleanup hands the connection's pawn (the
+	 *  truck) to the departing player. */
+	virtual void PawnLeavingGame() override;
+
 protected:
 
 	/** Input Mapping Contexts */
@@ -48,10 +54,6 @@ protected:
 
 	/** Gameplay initialization */
 	virtual void BeginPlay() override;
-
-	/** MP-3: a level-placed truck must survive disconnect cleanup — this is the
-	 *  hook where connection cleanup destroys the connection's pawn. */
-	virtual void PawnLeavingGame() override;
 
 	/** Input mapping context setup */
 	virtual void SetupInputComponent() override;

@@ -1,5 +1,17 @@
 # CHANGELOG
 
+## 2026-11-06 - M8: disconnecting truck occupant no longer leaves an orphan
+- **M8:** on disconnect the abandoned occupant (the player's original pawn,
+  unpossessed at truck entry) used to stay standing in the world uncontrolled.
+  `EvictOccupant(bDestroyOrphan)` now destroys it on the leaving path, exactly
+  like the engine destroys any other disconnecting player's pawn. The duplicated
+  eviction in `GameMode::Logout` is gone - `PlayerController::PawnLeavingGame`
+  is the single disconnect path (it also owns protecting the level-placed truck
+  from the default `PawnLeavingGame` teardown). OnRep/EndPlay eviction keeps
+  its no-destroy semantics. New `Holdover.Truck.OccupantEviction` fails before
+  the fix ("orphan occupant destroyed on disconnect" - it was still alive).
+  Suite **34/34 pass**.
+
 ## 2026-11-06 - M6: hazard launch prediction gated and deterministic
 - **M6:** the locally controlled client predicts the hazard launch only when it
   is NOT the authority (`ShouldPredictLaunch`) - on a listen host the authority

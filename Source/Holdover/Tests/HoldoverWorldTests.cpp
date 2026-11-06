@@ -1050,4 +1050,72 @@ bool FHoldoverJetBlastPredictionTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Sonnet M8: a disconnecting truck occupant must not leave an orphan
+// Character. On disconnect the engine runs APlayerController::Destroyed ->
+// PawnLeavingGame while the connection's pawn is the level-placed truck: the
+// truck must survive and the abandoned occupant must be destroyed like any
+// disconnecting player's pawn. The non-disconnect eviction (OnRep/EndPlay)
+// must keep its no-destroy semantics.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverTruckOccupantEvictionTest,
+	"Holdover.Truck.OccupantEviction",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverTruckOccupantEvictionTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	AHoldoverDeicingTruck* Truck = Spawn<AHoldoverDeicingTruck>(World, FVector::ZeroVector);
+	AHoldoverTestCharacter* Char = Spawn<AHoldoverTestCharacter>(World, FVector(200.f, 0.f, 0.f));
+	AHoldoverTestController* PC = Spawn<AHoldoverTestController>(World, FVector(200.f, 0.f, 0.f));
+	if (!TestNotNull(TEXT("Truck"), Truck) || !TestNotNull(TEXT("Character"), Char)
+		|| !TestNotNull(TEXT("Controller"), PC))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+
+	PC->Possess(Char);
+	TestTrue(TEXT("entering the truck succeeds"), Truck->TryEnter(Char));
+	TestTrue(TEXT("truck occupied"), Truck->IsOccupied());
+	TestTrue(TEXT("occupant hidden in vehicle"), Char->IsHidden());
+
+	// Disconnect: the engine runs PawnLeavingGame while the connection's pawn
+	// is the truck.
+	PC->PawnLeavingGame();
+
+	TestFalse(TEXT("orphan occupant destroyed on disconnect"), IsValid(Char));
+	TestFalse(TEXT("level-placed truck survives the disconnect"), Truck->IsPendingKillPending());
+	TestFalse(TEXT("truck freed for the rest of the crew"), Truck->IsOccupied());
+
+	// Eviction is idempotent - a second pass must be a no-op.
+	Truck->EvictOccupant();
+	TestFalse(TEXT("second eviction is a no-op"), Truck->IsOccupied());
+	TestFalse(TEXT("truck alive after double eviction"), Truck->IsPendingKillPending());
+
+	// The non-disconnect path (OnRep_Controller/EndPlay) must NOT destroy the
+	// occupant - only the leaving-controller path does.
+	AHoldoverTestCharacter* Char2 = Spawn<AHoldoverTestCharacter>(World, FVector(200.f, 0.f, 0.f));
+	if (!TestNotNull(TEXT("Second character"), Char2))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	PC->Possess(Char2);
+	TestTrue(TEXT("second occupant enters"), Truck->TryEnter(Char2));
+	Truck->EvictOccupant();
+	TestTrue(TEXT("non-disconnect eviction keeps the occupant alive"), IsValid(Char2));
+	TestFalse(TEXT("second occupant freed"), Truck->IsOccupied());
+
+	DestroyTestWorld(World);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

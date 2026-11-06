@@ -111,6 +111,7 @@ $ExpectedTests = @(
     'Holdover.Treatment.SectionOwnership',
     'Holdover.Treatment.ShiftProfiles',
     'Holdover.Truck.BoomClampAndApply',
+    'Holdover.Truck.OccupantEviction',
     'Holdover.UI.BoardStateColor'
 )
 

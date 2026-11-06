@@ -88,9 +88,12 @@ public:
 
 	AActor* GetOccupant() const { return OccupantCharacter.Get(); }
 
-	/** MP-3: restore the hidden occupant and clear occupancy. Idempotent; does not
-	 *  possess (exit owns re-possession). Called from Logout/unpossess/EndPlay paths. */
-	void EvictOccupant();
+	/** MP-3/M8: restore the hidden occupant and clear occupancy. Idempotent; does
+	 *  not possess (exit owns re-possession). bDestroyOrphan additionally
+	 *  destroys the abandoned occupant (the disconnect path - the engine would
+	 *  destroy any other leaving player's pawn). Called from the single
+	 *  disconnect path (PawnLeavingGame), plus OnRep_Controller/EndPlay. */
+	void EvictOccupant(bool bDestroyOrphan = false);
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
