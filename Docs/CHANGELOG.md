@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-11-06 - backlog complete: packaged smoke gate PASS + docs
+- Packaged Win64 Development build re-verified with the strict smoke gate
+  (`Tools/package_win64.ps1`): `LoadMap: L_RampGreybox` + `Field manual built`
+  evidence present, process tree killed cleanly, 0 fatals, 0 content errors.
+- Suite **39/39** (`Tools/run_tests.ps1`, full expected list).
+- `Docs/AI/STATUS.md` rewritten READY FOR ALI (fix list with commit ids, what
+  needs play-testing, residual caveats); `Docs/KNOWN_ISSUES.md` Medium backlog
+  marked DONE. The full Sonnet-review backlog (M4-M6, M8, M12, M14 remainder,
+  N2-N11) is now closed.
+
 ## 2026-11-06 - N2-N11: nit backlog
 - **N2:** HUD/board `SetText` only when the rebuilt string changed; the spray
   component is re-found only when the possessed pawn changes (was per-frame
