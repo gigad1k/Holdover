@@ -114,6 +114,10 @@ public:
 	UPROPERTY(ReplicatedUsing = OnRep_Dispatch, BlueprintReadOnly, Category = "Dispatch")
 	TArray<FText> DispatchFeed;
 
+	/** M14: true only when the feed grew since the last replicated update -
+	 *  the initial join replicate carries the whole feed and must not beep. */
+	bool ShouldPlayDispatchBeep();
+
 	// --- deterministic shift API (server; tests call directly) ---
 	void StartShift(float DurationSeconds, int32 InQuota);
 	void TickShift(float DeltaSeconds);
@@ -153,6 +157,10 @@ protected:
 
 	UFUNCTION()
 	void OnRep_Dispatch();
+
+	/** M14: client-side feed-growth tracking for ShouldPlayDispatchBeep. */
+	bool bSeenDispatchFeed = false;
+	int32 LastSeenDispatchLen = 0;
 
 	/** G-5: replicated — a late joiner computing elapsed = duration - remaining
 	 *  must read the real duration, not the local default. */

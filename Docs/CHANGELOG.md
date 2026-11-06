@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-11-06 - M14 remainder: audio hygiene
+- **M14 (remainder):** sound waves now load once and are held by the new
+  `UHoldoverAudioSubsystem` (a `UGameInstanceSubsystem` cache; a cached miss
+  also stops the per-call `PLACEHOLDER AUDIO MISSING` warning spam).
+  `Play2D` skips entirely on dedicated servers (`ShouldPlayAudio`), and
+  `OnRep_Dispatch` no longer beeps on the initial join replicate of the whole
+  feed (`ShouldPlayDispatchBeep` - beep only when the feed grew). New
+  `Holdover.Audio.Hygiene` pins all three. Suite **36/36 pass**.
+
 ## 2026-11-06 - M12: departure board shows every live aircraft
 - **M12:** the board cached the first `TActorIterator<AHoldoverAircraft>` hit
   and `break`ed - with the two-plane shift it could show a hidden, un-arrived

@@ -5,11 +5,14 @@
 #include "Components/BoxComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Holdover.h"
 #include "HoldoverAircraft.h"
+#include "HoldoverAudioLibrary.h"
+#include "HoldoverAudioSubsystem.h"
 #include "HoldoverCharacter.h"
 #include "HoldoverDeicingTruck.h"
 #include "HoldoverGameState.h"
@@ -1173,6 +1176,71 @@ bool FHoldoverDepartureBoardRowsTest::RunTest(const FString& Parameters)
 	Rows.Reset();
 	UHoldoverDepartureBoardWidget::GatherBoardAircraft(World, Rows);
 	TestEqual(TEXT("empty when no aircraft is live"), Rows.Num(), 0);
+
+	DestroyTestWorld(World);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Sonnet M14 (remainder): audio hygiene. Play2D used to LoadObject by string on
+// every call, ran on dedicated servers, and OnRep_Dispatch beeped on the
+// initial join replicate of the whole feed.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverAudioHygieneTest,
+	"Holdover.Audio.Hygiene",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverAudioHygieneTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	// Dedicated servers have no listener - they must not load or play.
+	TestTrue(TEXT("standalone plays"), UHoldoverAudioLibrary::ShouldPlayAudio(NM_Standalone));
+	TestTrue(TEXT("listen server plays"), UHoldoverAudioLibrary::ShouldPlayAudio(NM_ListenServer));
+	TestTrue(TEXT("client plays"), UHoldoverAudioLibrary::ShouldPlayAudio(NM_Client));
+	TestFalse(TEXT("dedicated server does not play"), UHoldoverAudioLibrary::ShouldPlayAudio(NM_DedicatedServer));
+
+	// Sounds load once and are held (Play2D used to LoadObject per call, and a
+	// cached miss stops the per-call MISSING warning spam too).
+	// (The subsystem is ClassWithin GameInstance - create a bare one as outer.)
+	UGameInstance* GameInstance = NewObject<UGameInstance>();
+	UHoldoverAudioSubsystem* Audio = GameInstance
+		? NewObject<UHoldoverAudioSubsystem>(GameInstance)
+		: nullptr;
+	if (!TestNotNull(TEXT("Audio subsystem"), Audio))
+	{
+		return false;
+	}
+	USoundWave* First = Audio->GetSound(FName("wind_loop"));
+	USoundWave* Second = Audio->GetSound(FName("wind_loop"));
+	TestTrue(TEXT("repeated lookups return the same wave"), First == Second);
+	const int32 CachedAfterHit = Audio->GetCachedSoundCount();
+	TestTrue(TEXT("lookup is cached"), CachedAfterHit >= 1);
+
+	USoundWave* Missing = Audio->GetSound(FName("definitely_not_a_real_sound_xyz"));
+	TestNull(TEXT("missing sound returns null"), Missing);
+	Audio->GetSound(FName("definitely_not_a_real_sound_xyz"));
+	TestEqual(TEXT("a miss is cached too (one lookup, one warning)"),
+		Audio->GetCachedSoundCount(), CachedAfterHit + 1);
+
+	// The initial join replicate carries the whole feed - it must not beep.
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+	AHoldoverGameState* GS = Spawn<AHoldoverGameState>(World, FVector::ZeroVector);
+	if (!TestNotNull(TEXT("GameState"), GS))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	GS->DispatchFeed.Add(FText::FromString(TEXT("line a")));
+	GS->DispatchFeed.Add(FText::FromString(TEXT("line b")));
+	TestFalse(TEXT("no beep on the initial join replicate"), GS->ShouldPlayDispatchBeep());
+	GS->DispatchFeed.Add(FText::FromString(TEXT("line c")));
+	TestTrue(TEXT("beep when the feed grows"), GS->ShouldPlayDispatchBeep());
+	TestFalse(TEXT("no beep when the feed did not grow"), GS->ShouldPlayDispatchBeep());
 
 	DestroyTestWorld(World);
 	return true;

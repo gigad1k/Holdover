@@ -315,10 +315,27 @@ void AHoldoverGameState::OnRep_Shift()
 	// HUD reads the replicated values directly.
 }
 
+bool AHoldoverGameState::ShouldPlayDispatchBeep()
+{
+	// M14: the initial join replicate carries the whole feed - that is not
+	// news. After that, beep only when the feed grew.
+	const int32 NewLen = DispatchFeed.Num();
+	if (!bSeenDispatchFeed)
+	{
+		bSeenDispatchFeed = true;
+		LastSeenDispatchLen = NewLen;
+		return false;
+	}
+	const bool bGrew = NewLen > LastSeenDispatchLen;
+	LastSeenDispatchLen = NewLen;
+	return bGrew;
+}
+
 void AHoldoverGameState::OnRep_Dispatch()
 {
-	// Radio beep on clients for each replicated dispatch update.
-	if (GetWorld() && !HasAuthority())
+	// Radio beep on clients for each replicated dispatch update (M14: not on
+	// the initial join replicate, and only when the feed grew).
+	if (GetWorld() && !HasAuthority() && ShouldPlayDispatchBeep())
 	{
 		UHoldoverAudioLibrary::Play2D(this, FName("radio_beep"), 0.6f);
 	}
