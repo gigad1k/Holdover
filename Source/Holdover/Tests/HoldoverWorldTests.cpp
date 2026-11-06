@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
 #include "Components/BoxComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
@@ -12,6 +13,7 @@
 #include "HoldoverCharacter.h"
 #include "HoldoverDeicingTruck.h"
 #include "HoldoverGameState.h"
+#include "HoldoverHazardVolume.h"
 #include "HoldoverPlayerState.h"
 #include "HoldoverSprayComponent.h"
 #include "HoldoverSurfaceSection.h"
@@ -947,6 +949,102 @@ bool FHoldoverIceOverlapCountTest::RunTest(const FString& Parameters)
 	// Unbalanced release must not underflow into a permanent slow.
 	Char->SetIceSlowed(false, 0.5f);
 	TestEqual(TEXT("unbalanced release is clamped"), Move->MaxWalkSpeed, Base, KINDA_SMALL_NUMBER);
+
+	DestroyTestWorld(World);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Sonnet M6: hazard prediction is gated and deterministic. The locally
+// controlled client predicts the launch only when it is NOT the authority -
+// in the test world (NM_Standalone) a possessed pawn is both locally controlled
+// and authoritative, i.e. exactly the listen-host seat where prediction used to
+// launch twice (its own FRandRange, then the server's). Both the ice stumble
+// and the jet-blast push must land on the same deterministic direction the
+// server computes.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverJetBlastPredictionTest,
+	"Holdover.Hazard.JetBlastPrediction",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverJetBlastPredictionTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	// Prediction gate matrix (M6).
+	TestFalse(TEXT("listen host must not predict"),
+		AHoldoverHazardVolume::ShouldPredictLaunch(/*bHasAuthority*/ true, /*bLocallyControlled*/ true));
+	TestTrue(TEXT("remote client predicts"),
+		AHoldoverHazardVolume::ShouldPredictLaunch(false, true));
+	TestFalse(TEXT("server does not predict"),
+		AHoldoverHazardVolume::ShouldPredictLaunch(true, false));
+	TestFalse(TEXT("simulated proxy does not predict"),
+		AHoldoverHazardVolume::ShouldPredictLaunch(false, false));
+
+	// Deterministic direction formulas (M6 - the ice path used to be random).
+	const FVector Fwd = FVector::ForwardVector;
+	const FVector ExpectedStumble = (Fwd * 0.5f + FVector(0.f, 0.f, 0.15f)).GetSafeNormal();
+	TestTrue(TEXT("stumble direction is deterministic"),
+		AHoldoverHazardVolume::ComputeStumbleDirection(Fwd).Equals(ExpectedStumble, KINDA_SMALL_NUMBER));
+	TestTrue(TEXT("stumble direction stable across calls"),
+		AHoldoverHazardVolume::ComputeStumbleDirection(Fwd).Equals(
+			AHoldoverHazardVolume::ComputeStumbleDirection(Fwd), KINDA_SMALL_NUMBER));
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	AHoldoverTestCharacter* Char = Spawn<AHoldoverTestCharacter>(World, FVector::ZeroVector);
+	AHoldoverTestController* PC = Spawn<AHoldoverTestController>(World, FVector::ZeroVector);
+	if (!TestNotNull(TEXT("Character"), Char) || !TestNotNull(TEXT("Controller"), PC))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	PC->Possess(Char);
+	TestTrue(TEXT("possessed pawn is the listen-host seat in this world"), Char->IsLocallyControlled());
+
+	UCharacterMovementComponent* Move = Char->GetCharacterMovement();
+	if (!TestNotNull(TEXT("Character movement"), Move))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	// Bare test worlds never BeginPlay, so the movement component is inactive
+	// and LaunchCharacter would no-op. Flip the active flag like BeginPlay would
+	// (Activate(true) would Reset() the mode to MOVE_None).
+	Move->SetActive(true);
+	// The possess/restart chain leaves the movement at MOVE_None here; put it
+	// back to a live mode so LaunchCharacter applies, as it does in game.
+	Move->SetMovementMode(MOVE_Falling);
+
+	// Drive the REAL overlap behaviour (the same entry the engine's overlap
+	// delegate reaches).
+	AHoldoverHazardVolume* Ice = Spawn<AHoldoverHazardVolume>(World, FVector(0.f, 0.f, 50.f));
+	if (!TestNotNull(TEXT("Ice volume"), Ice))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	Ice->HazardType = EHoldoverHazardType::Ice;
+	Ice->HandleBeginOverlap(Char);
+	TestTrue(TEXT("ice stumble is the deterministic direction (no per-call FRandRange)"),
+		Move->PendingLaunchVelocity.Equals(ExpectedStumble * Ice->IceStumbleStrength, 0.1f));
+
+	AHoldoverHazardVolume* Blast = Spawn<AHoldoverHazardVolume>(World, FVector(300.f, 0.f, 50.f));
+	if (!TestNotNull(TEXT("Jet-blast volume"), Blast))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	Blast->HazardType = EHoldoverHazardType::JetBlast;
+	Blast->HandleBeginOverlap(Char);
+	const FVector ExpectedBlast =
+		(Char->GetActorLocation() - Blast->GetActorLocation()).GetSafeNormal2D() + FVector(0.f, 0.f, 0.35f);
+	TestTrue(TEXT("jet-blast push is the deterministic direction"),
+		Move->PendingLaunchVelocity.Equals(ExpectedBlast * Blast->JetBlastLaunchStrength, 0.1f));
 
 	DestroyTestWorld(World);
 	return true;

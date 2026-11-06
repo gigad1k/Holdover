@@ -80,6 +80,7 @@ $ErrorActionPreference = 'Stop'
 # ---------------------------------------------------------------------------
 $ExpectedTests = @(
     'Holdover.Hazard.IceOverlapCount',
+    'Holdover.Hazard.JetBlastPrediction',
     'Holdover.Info.CreditsLegalFeedback',
     'Holdover.Info.QuickTip',
     'Holdover.Info.TutorialTips',

@@ -1,5 +1,19 @@
 # CHANGELOG
 
+## 2026-11-06 - M6: hazard launch prediction gated and deterministic
+- **M6:** the locally controlled client predicts the hazard launch only when it
+  is NOT the authority (`ShouldPredictLaunch`) - on a listen host the authority
+  launch already runs in the same frame, so predicting too launched twice (the
+  second overwrote the first). The ice stumble used to draw its own
+  `FRandRange` on each side, so client prediction and the server launch never
+  matched; both the stumble and jet-blast directions are now deterministic
+  shared formulas. The collision cue still plays locally in every seat.
+  New `Holdover.Hazard.JetBlastPrediction` drives the real overlap entry point
+  in the listen-host seat (possessed pawn in a standalone test world) and pins
+  the gate matrix + both directions. Overlap behaviour is exposed as
+  `HandleBeginOverlap`/`HandleEndOverlap` (the UFUNCTIONs forward to it).
+  Suite **33/33 pass**.
+
 ## 2026-11-06 - M5: ice slowdown is overlap-counted
 - **M5:** `SetIceSlowed` is now a per-character overlap counter — leaving one
   ice patch while still inside another keeps the slowdown; only the last
