@@ -14,6 +14,7 @@
 #include "HoldoverDeicingTruck.h"
 #include "HoldoverGameState.h"
 #include "HoldoverHazardVolume.h"
+#include "HoldoverPanelWidgets.h"
 #include "HoldoverPlayerState.h"
 #include "HoldoverSprayComponent.h"
 #include "HoldoverSurfaceSection.h"
@@ -1113,6 +1114,65 @@ bool FHoldoverTruckOccupantEvictionTest::RunTest(const FString& Parameters)
 	Truck->EvictOccupant();
 	TestTrue(TEXT("non-disconnect eviction keeps the occupant alive"), IsValid(Char2));
 	TestFalse(TEXT("second occupant freed"), Truck->IsOccupied());
+
+	DestroyTestWorld(World);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Sonnet M12: the departure board shows ALL arrived, non-departed aircraft.
+// It used to cache the first TActorIterator hit and break - with the two-plane
+// shift that could be an un-arrived, hidden or already-departed plane.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverDepartureBoardRowsTest,
+	"Holdover.UI.DepartureBoardRows",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverDepartureBoardRowsTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	AHoldoverAircraft* Live1 = Spawn<AHoldoverAircraft>(World, FVector(0.f, 0.f, 0.f));
+	AHoldoverAircraft* NotArrived = Spawn<AHoldoverAircraft>(World, FVector(1000.f, 0.f, 0.f));
+	AHoldoverAircraft* Departed = Spawn<AHoldoverAircraft>(World, FVector(2000.f, 0.f, 0.f));
+	AHoldoverAircraft* Live2 = Spawn<AHoldoverAircraft>(World, FVector(3000.f, 0.f, 0.f));
+	if (!TestNotNull(TEXT("Live1"), Live1) || !TestNotNull(TEXT("NotArrived"), NotArrived)
+		|| !TestNotNull(TEXT("Departed"), Departed) || !TestNotNull(TEXT("Live2"), Live2))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+
+	Live1->bArrived = true;
+	Live1->bDeparted = false;
+	NotArrived->bArrived = false;
+	NotArrived->bDeparted = false;
+	Departed->bArrived = true;
+	Departed->bDeparted = true;
+	Live2->bArrived = true;
+	Live2->bDeparted = false;
+
+	TArray<AHoldoverAircraft*> Rows;
+	UHoldoverDepartureBoardWidget::GatherBoardAircraft(World, Rows);
+
+	TestEqual(TEXT("all arrived, non-departed aircraft are shown"), Rows.Num(), 2);
+	TestTrue(TEXT("first live aircraft shown"), Rows.Contains(Live1));
+	TestTrue(TEXT("second live aircraft shown"), Rows.Contains(Live2));
+	TestFalse(TEXT("un-arrived aircraft hidden"), Rows.Contains(NotArrived));
+	TestFalse(TEXT("departed aircraft hidden"), Rows.Contains(Departed));
+
+	// Nothing live: the board is empty rather than showing a stale plane.
+	Live1->bDeparted = true;
+	Live2->bArrived = false;
+	Rows.Reset();
+	UHoldoverDepartureBoardWidget::GatherBoardAircraft(World, Rows);
+	TestEqual(TEXT("empty when no aircraft is live"), Rows.Num(), 0);
 
 	DestroyTestWorld(World);
 	return true;

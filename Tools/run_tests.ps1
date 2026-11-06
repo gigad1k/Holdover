@@ -112,7 +112,8 @@ $ExpectedTests = @(
     'Holdover.Treatment.ShiftProfiles',
     'Holdover.Truck.BoomClampAndApply',
     'Holdover.Truck.OccupantEviction',
-    'Holdover.UI.BoardStateColor'
+    'Holdover.UI.BoardStateColor',
+    'Holdover.UI.DepartureBoardRows'
 )
 
 # Result line format (AutomationControllerManager.cpp, AutomationStateFormat):

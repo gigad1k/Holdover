@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-11-06 - M12: departure board shows every live aircraft
+- **M12:** the board cached the first `TActorIterator<AHoldoverAircraft>` hit
+  and `break`ed - with the two-plane shift it could show a hidden, un-arrived
+  or already-departed plane. `GatherBoardAircraft` now selects ALL arrived,
+  non-departed aircraft and the board renders one status/treatment/sections
+  row-group each (pooled `UTextBlock`s, `NAME_None` names). New
+  `Holdover.UI.DepartureBoardRows` pins the selection incl. the empty case.
+  Suite **35/35 pass**. (Rows are built in `NativeTick`, so the visual pass
+  still needs Ali's windowed run - UMG ticks do not run under `-nullrhi`.)
+
 ## 2026-11-06 - M8: disconnecting truck occupant no longer leaves an orphan
 - **M8:** on disconnect the abandoned occupant (the player's original pawn,
   unpossessed at truck entry) used to stay standing in the world uncontrolled.
