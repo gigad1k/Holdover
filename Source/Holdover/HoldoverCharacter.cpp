@@ -306,7 +306,21 @@ void AHoldoverCharacter::ServerSetSprint_Implementation(bool bEnabled)
 
 void AHoldoverCharacter::SetIceSlowed(bool bSlowed, float Multiplier)
 {
-	IceScale = bSlowed ? Multiplier : 1.f;
+	// M5: overlap-counted. Leaving one ice patch while still inside another must
+	// keep the slowdown; only the last release clears it.
+	if (bSlowed)
+	{
+		++IceOverlapCount;
+		IceScale = Multiplier;
+	}
+	else
+	{
+		IceOverlapCount = FMath::Max(0, IceOverlapCount - 1);
+		if (IceOverlapCount == 0)
+		{
+			IceScale = 1.f;
+		}
+	}
 	RecomputeSpeedScale();
 }
 

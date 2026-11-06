@@ -79,6 +79,7 @@ $ErrorActionPreference = 'Stop'
 # outside the list passed silently. Keep this in sync when adding tests.
 # ---------------------------------------------------------------------------
 $ExpectedTests = @(
+    'Holdover.Hazard.IceOverlapCount',
     'Holdover.Info.CreditsLegalFeedback',
     'Holdover.Info.QuickTip',
     'Holdover.Info.TutorialTips',

@@ -6,6 +6,7 @@
 #include "Components/SceneComponent.h"
 #include "Engine/World.h"
 #include "GameFramework/Actor.h"
+#include "GameFramework/CharacterMovementComponent.h"
 #include "Holdover.h"
 #include "HoldoverAircraft.h"
 #include "HoldoverCharacter.h"
@@ -19,6 +20,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "Net/UnrealNetwork.h"
+#include "Tests/HoldoverTestFixtures.h"
 #include "UObject/UnrealType.h"
 
 #if WITH_DEV_AUTOMATION_TESTS
@@ -889,6 +891,62 @@ bool FHoldoverSectionTargetValidationWorldTest::RunTest(const FString& Parameter
 	Aircraft->bDeparted = false;
 	Aircraft->bArrived = false;
 	TestFalse(TEXT("un-arrived aircraft panels rejected"), Spray->ServerApplySprayRequest(Front, 0.1f, 2.0));
+
+	DestroyTestWorld(World);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Sonnet M5: the ice slowdown is overlap-counted. Overlapping two ice patches
+// and leaving one used to clear the slowdown (OnOverlapEnd always released) -
+// the counter must hold it until the LAST release. Drives the same
+// SetIceSlowed calls the hazard volumes make (the volumes are symmetric
+// begin/end, so the counting contract lives on the character).
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverIceOverlapCountTest,
+	"Holdover.Hazard.IceOverlapCount",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverIceOverlapCountTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	AHoldoverTestCharacter* Char = Spawn<AHoldoverTestCharacter>(World, FVector::ZeroVector);
+	if (!TestNotNull(TEXT("Character"), Char))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	UCharacterMovementComponent* Move = Char->GetCharacterMovement();
+	if (!TestNotNull(TEXT("Character movement"), Move))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	const float Base = Move->MaxWalkSpeed;
+
+	// One ice patch: slowed.
+	Char->SetIceSlowed(true, 0.5f);
+	TestEqual(TEXT("slowed while on ice"), Move->MaxWalkSpeed, Base * 0.5f, KINDA_SMALL_NUMBER);
+
+	// Two overlapping patches, then one released - still slowed.
+	Char->SetIceSlowed(true, 0.5f);
+	Char->SetIceSlowed(false, 0.5f);
+	TestEqual(TEXT("still slowed while a second patch is held"), Move->MaxWalkSpeed, Base * 0.5f, KINDA_SMALL_NUMBER);
+
+	// Last patch released - cleared exactly once.
+	Char->SetIceSlowed(false, 0.5f);
+	TestEqual(TEXT("cleared only at the last release"), Move->MaxWalkSpeed, Base, KINDA_SMALL_NUMBER);
+
+	// Unbalanced release must not underflow into a permanent slow.
+	Char->SetIceSlowed(false, 0.5f);
+	TestEqual(TEXT("unbalanced release is clamped"), Move->MaxWalkSpeed, Base, KINDA_SMALL_NUMBER);
 
 	DestroyTestWorld(World);
 	return true;

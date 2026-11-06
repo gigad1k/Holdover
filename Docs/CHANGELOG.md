@@ -1,5 +1,15 @@
 # CHANGELOG
 
+## 2026-11-06 - M5: ice slowdown is overlap-counted
+- **M5:** `SetIceSlowed` is now a per-character overlap counter — leaving one
+  ice patch while still inside another keeps the slowdown; only the last
+  release clears it (unbalanced releases are clamped at zero). New
+  `Holdover.Hazard.IceOverlapCount` drives the exact begin/end calls the hazard
+  volumes make and fails before the fix ("still slowed ... expected 300 but was
+  600"). New `Tests/HoldoverTestFixtures.h` adds a spawnable
+  `AHoldoverTestCharacter` (the game classes stay abstract; tests used to be
+  limited to CDOs). Suite **32/32 pass**.
+
 ## 2026-11-06 - M4: client sprint prediction sees the ice slowdown
 - **M4:** `IceScale` is now `UPROPERTY(ReplicatedUsing = OnRep_IceScale)` with a
   `DOREPLIFETIME` registration; `OnRep_IceScale` recomputes the local speed so a
