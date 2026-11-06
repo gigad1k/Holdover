@@ -98,8 +98,10 @@ $ExpectedTests = @(
     'Holdover.MP.ShiftEndFreeze',
     'Holdover.MP.SprayValidation',
     'Holdover.Shift.DepartureOnlyOnceAndValid',
+    'Holdover.Shift.RestartGuard',
     'Holdover.Shift.ScoringAndRestart',
     'Holdover.Spray.DtClamp',
+    'Holdover.Treatment.AircraftTuningStays',
     'Holdover.Treatment.Contamination',
     'Holdover.Treatment.DispatcherBank',
     'Holdover.Treatment.FluidRules',
@@ -112,6 +114,7 @@ $ExpectedTests = @(
     'Holdover.Treatment.SectionOwnership',
     'Holdover.Treatment.ShiftProfiles',
     'Holdover.Truck.BoomClampAndApply',
+    'Holdover.Truck.ExitTeleport',
     'Holdover.Truck.OccupantEviction',
     'Holdover.UI.BoardStateColor',
     'Holdover.UI.DepartureBoardRows'

@@ -113,6 +113,11 @@ protected:
 	float BoomExtAllowance = 0.f;
 	double LastBoomRateTime = -1.0;
 
+	/** N3: cap the boom RPC to ~20 Hz (input runs at 60-144 Hz while held).
+	 *  Targets are absolute, so intermediate sends are droppable. */
+	double LastBoomSendTime = -1.0;
+	static constexpr double BoomSendInterval = 0.05;
+
 	UPROPERTY(Transient)
 	class UInputMappingContext* TruckContext;
 
@@ -132,6 +137,8 @@ protected:
 	void ApplyBoomTransform();
 	void YawBoom(float Direction);
 	void ExtendBoom(float Direction);
+	/** N3: throttled (~20 Hz) unreliable boom RPC send. */
+	void SendBoomUpdate();
 
 	// --- input handlers (Enhanced Input, (const FInputActionValue&) signatures) ---
 	void BoomYawLeft(const struct FInputActionValue& Value);

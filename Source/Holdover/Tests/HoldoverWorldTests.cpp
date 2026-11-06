@@ -1246,4 +1246,107 @@ bool FHoldoverAudioHygieneTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+// ---------------------------------------------------------------------------
+// Sonnet N4: exiting the truck teleports the driver to a safe spot beside it.
+// It used to re-appear wherever it stood at ENTRY - with the truck moved (or
+// driving enabled later) that is a stale, wrong exit point.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverTruckExitTeleportTest,
+	"Holdover.Truck.ExitTeleport",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverTruckExitTeleportTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	AHoldoverDeicingTruck* Truck = Spawn<AHoldoverDeicingTruck>(World, FVector::ZeroVector);
+	AHoldoverTestCharacter* Char = Spawn<AHoldoverTestCharacter>(World, FVector(200.f, 0.f, 0.f));
+	AHoldoverTestController* PC = Spawn<AHoldoverTestController>(World, FVector(200.f, 0.f, 0.f));
+	if (!TestNotNull(TEXT("Truck"), Truck) || !TestNotNull(TEXT("Character"), Char)
+		|| !TestNotNull(TEXT("Controller"), PC))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+
+	PC->Possess(Char);
+	TestTrue(TEXT("entering the truck succeeds"), Truck->TryEnter(Char));
+
+	// The truck moves away while the driver is up in the basket.
+	const FVector NewTruckSpot(5000.f, 0.f, 0.f);
+	Truck->SetActorLocation(NewTruckSpot);
+
+	Truck->TryExit();
+
+	TestFalse(TEXT("driver left the truck"), Truck->IsOccupied());
+	TestTrue(TEXT("driver exits beside the truck, not at the entry spot"),
+		FVector::Dist(Char->GetActorLocation(), NewTruckSpot) < 500.f);
+
+	DestroyTestWorld(World);
+	return true;
+}
+
+// ---------------------------------------------------------------------------
+// Sonnet N8: Aircraft::Tick copied the GameState tuning into the EditAnywhere
+// tuning properties every tick, clobbering designer edits. Tuning now flows
+// through the GameState getters (with the members as fallback) and the
+// properties are never overwritten.
+// ---------------------------------------------------------------------------
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverAircraftTuningStaysTest,
+	"Holdover.Treatment.AircraftTuningStays",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverAircraftTuningStaysTest::RunTest(const FString& Parameters)
+{
+	using namespace HoldoverWorldTest;
+
+	UWorld* World = CreateTestWorld();
+	if (!TestNotNull(TEXT("Test world"), World))
+	{
+		return false;
+	}
+
+	AHoldoverGameState* GS = Spawn<AHoldoverGameState>(World, FVector::ZeroVector);
+	AHoldoverAircraft* Aircraft = Spawn<AHoldoverAircraft>(World, FVector::ZeroVector);
+	if (!TestNotNull(TEXT("GameState"), GS) || !TestNotNull(TEXT("Aircraft"), Aircraft))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+
+	FObjectPropertyBase* GameStateProp =
+		FindFProperty<FObjectPropertyBase>(UWorld::StaticClass(), FName(TEXT("GameState")));
+	if (!TestNotNull(TEXT("UWorld::GameState property exists"), GameStateProp))
+	{
+		DestroyTestWorld(World);
+		return false;
+	}
+	GameStateProp->SetObjectPropertyValue_InContainer(World, GS);
+	GS->ShiftState = EShiftState::InProgress;
+	Aircraft->bArrived = true;
+
+	// Designer edits (per-aircraft overrides).
+	Aircraft->ProtectionDegradationPerSecond = 42.f;
+	Aircraft->HoldoverDuration = 999.f;
+	Aircraft->ReContaminationRatePerSecond = 7.f;
+
+	Aircraft->Tick(0.1f);
+
+	TestEqual(TEXT("designer degradation value survives Tick"),
+		Aircraft->ProtectionDegradationPerSecond, 42.f, KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("designer holdover duration survives Tick"),
+		Aircraft->HoldoverDuration, 999.f, KINDA_SMALL_NUMBER);
+	TestEqual(TEXT("designer re-contamination value survives Tick"),
+		Aircraft->ReContaminationRatePerSecond, 7.f, KINDA_SMALL_NUMBER);
+
+	DestroyTestWorld(World);
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

@@ -172,6 +172,11 @@ void AHoldoverDeicingTruck::ServerExit_Implementation()
 		{
 			HC->SetVehicleHidden(false);
 		}
+		// N4: leave the driver beside the truck, not at the spot it stood when it
+		// entered (the truck may have moved - mandatory once driving is enabled).
+		Pawn->SetActorLocation(
+			GetActorLocation() + GetActorRightVector() * 300.f + FVector(0.f, 0.f, 50.f),
+			false, nullptr, ETeleportType::TeleportPhysics);
 		UE_LOG(LogHoldover, Display, TEXT("Truck '%s' exited back to '%s'"), *GetName(), *Pawn->GetName());
 	}
 	OccupantCharacter.Reset();
@@ -299,20 +304,31 @@ void AHoldoverDeicingTruck::YawBoom(float Direction)
 {
 	const float DeltaSeconds = GetWorld()->GetDeltaSeconds();
 	SetBoom(BoomYaw + Direction * YawSpeed * DeltaSeconds, BoomExtension);
-	if (!HasAuthority())
-	{
-		ServerSetBoom(BoomYaw, BoomExtension);
-	}
+	SendBoomUpdate();
 }
 
 void AHoldoverDeicingTruck::ExtendBoom(float Direction)
 {
 	const float DeltaSeconds = GetWorld()->GetDeltaSeconds();
 	SetBoom(BoomYaw, BoomExtension + Direction * ExtensionSpeed * DeltaSeconds);
-	if (!HasAuthority())
+	SendBoomUpdate();
+}
+
+void AHoldoverDeicingTruck::SendBoomUpdate()
+{
+	if (HasAuthority())
 	{
-		ServerSetBoom(BoomYaw, BoomExtension);
+		return;
 	}
+	// N3: 60-144 unreliable RPCs per second while a key is held is waste - the
+	// targets are absolute, so a ~20 Hz stream tracks the same motion.
+	const double Now = GetWorld() ? (double)GetWorld()->GetTimeSeconds() : 0.0;
+	if (LastBoomSendTime >= 0.0 && Now - LastBoomSendTime < BoomSendInterval)
+	{
+		return;
+	}
+	LastBoomSendTime = Now;
+	ServerSetBoom(BoomYaw, BoomExtension);
 }
 
 void AHoldoverDeicingTruck::BoomYawLeft(const FInputActionValue& Value) { YawBoom(-1.f); }

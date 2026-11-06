@@ -36,6 +36,9 @@ protected:
 	/** One pooled text block per rendered row (3 per live aircraft). */
 	UPROPERTY(Transient) UVerticalBox* RowBox;
 	UPROPERTY(Transient) TArray<TObjectPtr<UTextBlock>> RowPool;
+
+	/** N2: SetText only when the row's string actually changed. */
+	TArray<FString> LastRowTexts;
 };
 
 /** Last dispatcher lines (radio feed). */

@@ -88,4 +88,31 @@ bool FHoldoverShiftLoopTest::RunTest(const FString& Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FHoldoverRestartGuardTest,
+	"Holdover.Shift.RestartGuard",
+	EAutomationTestFlags::EditorContext | EAutomationTestFlags::ProductFilter)
+
+bool FHoldoverRestartGuardTest::RunTest(const FString& Parameters)
+{
+	AHoldoverGameState* GS = NewObject<AHoldoverGameState>(GetTransientPackage());
+
+	// N5/N6: RestartShift is a post-verdict action - a mid-shift call must not
+	// roll the ledger or reset the counters out from under the running shift.
+	GS->StartShift(10.f, 2);
+	GS->RegisterDeparture(true);
+	GS->RestartShift();
+	TestEqual(TEXT("mid-shift restart keeps the shift running"), (int32)GS->ShiftState, (int32)EShiftState::InProgress);
+	TestEqual(TEXT("mid-shift restart keeps the ledger"), GS->OnTimeDepartures, 1);
+	TestEqual(TEXT("mid-shift restart keeps the shift number"), GS->ShiftNumber, 1);
+
+	// After the verdict it works and resets the counters.
+	GS->EndShift();
+	GS->RestartShift();
+	TestEqual(TEXT("post-verdict restart runs"), (int32)GS->ShiftState, (int32)EShiftState::InProgress);
+	TestEqual(TEXT("post-verdict restart resets counters"), GS->OnTimeDepartures + GS->LateDepartures + GS->Money + GS->Deductions, 0);
+	TestEqual(TEXT("post-verdict restart advances the shift"), GS->ShiftNumber, 2);
+
+	return true;
+}
+
 #endif // WITH_DEV_AUTOMATION_TESTS

@@ -337,10 +337,22 @@ bool UHoldoverSprayComponent::ValidateAndBeginRefill(EHoldoverFluidType NewType)
 
 	// G-1: the RPC is client-callable, so station proximity is validated here,
 	// not only on the interact path. Same slack as ServerInteract's range check.
-	bool bNearStation = false;
-	for (TActorIterator<AHoldoverTestInteractable> It(Owner->GetWorld()); It; ++It)
+	// N7: cache the station scan (refresh when empty or stale).
+	const double Now = (double)GetWorld()->GetTimeSeconds();
+	if (CachedRefillStations.Num() == 0 || Now - LastStationScanTime > StationRescanSeconds)
 	{
-		if (FVector::DistSquared(Owner->GetActorLocation(), It->GetActorLocation()) <= FMath::Square(RefillStationRange))
+		CachedRefillStations.Reset();
+		for (TActorIterator<AHoldoverTestInteractable> It(Owner->GetWorld()); It; ++It)
+		{
+			CachedRefillStations.Add(*It);
+		}
+		LastStationScanTime = Now;
+	}
+	bool bNearStation = false;
+	for (const TWeakObjectPtr<AActor>& Station : CachedRefillStations)
+	{
+		if (Station.IsValid()
+			&& FVector::DistSquared(Owner->GetActorLocation(), Station->GetActorLocation()) <= FMath::Square(RefillStationRange))
 		{
 			bNearStation = true;
 			break;

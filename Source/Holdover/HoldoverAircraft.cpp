@@ -233,14 +233,9 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 	if (const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>())
 	{
 		Weather = GS->WeatherSeverity;
-
-		// DES-5: sync tuning from the shift data asset (local defaults as fallback).
-		HoldoverDuration = GS->GetHoldoverDuration();
-		WeatherBurnMultiplier = GS->GetWeatherBurnMultiplier();
-		ProtectionDegradationPerSecond = GS->GetProtectionDegradationPerSecond();
-		HoldoverDegradationScale = GS->GetHoldoverDegradationScale();
-		ReContaminationRatePerSecond = GS->GetReContaminationRatePerSecond();
-		ReContaminationProtectionThreshold = GS->GetReContaminationProtectionThreshold();
+		// N8: tuning used to be copied from the GameState into the EditAnywhere
+		// properties here every tick, clobbering designer edits. SimulateTreatment
+		// now reads through the GameState getters instead (properties = fallback).
 	}
 	SimulateTreatment(DeltaSeconds, Weather);
 }
@@ -334,11 +329,22 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	}
 	const float Weather = FMath::Clamp(WeatherSeverity, 0.f, 1.f);
 
+	// N8/DES-5: tuning flows through the GameState's shift data; the
+	// EditAnywhere members are per-aircraft designer fallbacks and are never
+	// overwritten (Tick used to copy the GameState values over them).
+	const AHoldoverGameState* TuningGS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
+	const float HoldoverDurationEff = TuningGS ? TuningGS->GetHoldoverDuration() : HoldoverDuration;
+	const float WeatherBurnEff = TuningGS ? TuningGS->GetWeatherBurnMultiplier() : WeatherBurnMultiplier;
+	const float DegradationPerSecEff = TuningGS ? TuningGS->GetProtectionDegradationPerSecond() : ProtectionDegradationPerSecond;
+	const float DegScaleEff = TuningGS ? TuningGS->GetHoldoverDegradationScale() : HoldoverDegradationScale;
+	const float ReContaminationRateEff = TuningGS ? TuningGS->GetReContaminationRatePerSecond() : ReContaminationRatePerSecond;
+	const float ReContaminationThresholdEff = TuningGS ? TuningGS->GetReContaminationProtectionThreshold() : ReContaminationProtectionThreshold;
+
 	// SIM-2: degradation is paused (or slowed) during an active holdover so
 	// expiry is the clock players actually fight, not the abort.
 	const bool bInHoldover = (HoldoverState == EHoldoverState::HoldoverActive);
-	const float DegScale = bInHoldover ? HoldoverDegradationScale : 1.f;
-	const float Degradation = ProtectionDegradationPerSecond * Weather * DegScale * DeltaSeconds;
+	const float DegScale = bInHoldover ? DegScaleEff : 1.f;
+	const float Degradation = DegradationPerSecEff * Weather * DegScale * DeltaSeconds;
 	for (AHoldoverSurfaceSection* Section : Sections)
 	{
 		if (Section)
@@ -348,12 +354,12 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	}
 
 	// SIM-3: precipitation re-contaminates unprotected sections.
-	if (ReContaminationRatePerSecond > 0.f && Weather > 0.f)
+	if (ReContaminationRateEff > 0.f && Weather > 0.f)
 	{
-		const float Contamination = ReContaminationRatePerSecond * Weather * DeltaSeconds;
+		const float Contamination = ReContaminationRateEff * Weather * DeltaSeconds;
 		for (AHoldoverSurfaceSection* Section : Sections)
 		{
-			if (Section && Section->ProtectionPercent < ReContaminationProtectionThreshold)
+			if (Section && Section->ProtectionPercent < ReContaminationThresholdEff)
 			{
 				Section->ApplyContamination(Contamination);
 			}
@@ -365,7 +371,7 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	if (HoldoverState == EHoldoverState::Incomplete && AreAllSectionsCleanAndProtected())
 	{
 		HoldoverState = EHoldoverState::HoldoverActive;
-		HoldoverRemaining = HoldoverDuration;
+		HoldoverRemaining = HoldoverDurationEff;
 		bJustStarted = true;
 		UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover started (%.0fs)"), *GetName(), HoldoverRemaining);
 		if (AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr)
@@ -390,7 +396,7 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 		}
 		else
 		{
-			HoldoverRemaining -= DeltaSeconds * (1.f + Weather * WeatherBurnMultiplier);
+			HoldoverRemaining -= DeltaSeconds * (1.f + Weather * WeatherBurnEff);
 			if (HoldoverRemaining <= 0.f)
 			{
 				HoldoverRemaining = 0.f;
@@ -415,7 +421,7 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	{
 		// Valid retreatment after expiry: restart the clock.
 		HoldoverState = EHoldoverState::HoldoverActive;
-		HoldoverRemaining = HoldoverDuration;
+		HoldoverRemaining = HoldoverDurationEff;
 		UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover restarted after retreatment"), *GetName());
 	}
 }

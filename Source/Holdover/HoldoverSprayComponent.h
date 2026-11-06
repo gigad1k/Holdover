@@ -63,6 +63,14 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Spray")
 	float RefillStationRange = 1000.f;
 
+	/** N7: the per-RPC station scan is cached; refreshed when empty or stale.
+	 *  The RPC is client-callable, so it used to TActorIterator the world on
+	 *  every request. */
+	UPROPERTY(Transient)
+	TArray<TWeakObjectPtr<AActor>> CachedRefillStations;
+	double LastStationScanTime = -1.0;
+	static constexpr double StationRescanSeconds = 5.0;
+
 	/** Getters that prefer the data asset over local defaults. */
 	float GetSprayRange() const { return FluidData ? FluidData->SprayRange : SprayRange; }
 	float GetCleanRate() const { return FluidData ? FluidData->CleanRatePerSecond : CleanRatePerSecond; }

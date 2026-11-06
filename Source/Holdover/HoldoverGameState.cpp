@@ -75,7 +75,7 @@ void AHoldoverGameState::EnsureShiftProfiles()
 	}
 }
 
-UHoldoverShiftData* AHoldoverGameState::GetCurrentProfile() const
+const UHoldoverShiftData* AHoldoverGameState::GetCurrentProfile() const
 {
 	if (ShiftProfiles.Num() > 0)
 	{
@@ -100,9 +100,14 @@ void AHoldoverGameState::SetWeatherSeverity(float NewSeverity)
 
 void AHoldoverGameState::StartShift(float DurationSeconds, int32 InQuota)
 {
+	// N6: shift state is server-authoritative - a client call must not desync.
+	if (!HasAuthority())
+	{
+		return;
+	}
 	// DES-4: use the current profile's spec when available.
 	EnsureShiftProfiles();
-	if (UHoldoverShiftData* Profile = GetCurrentProfile())
+	if (const UHoldoverShiftData* Profile = GetCurrentProfile())
 	{
 		LastShiftDuration = Profile->ShiftDuration;
 		Quota = Profile->ShiftQuota;
@@ -174,6 +179,11 @@ void AHoldoverGameState::TickShift(float DeltaSeconds)
 
 void AHoldoverGameState::EndShift()
 {
+	// N6: shift state is server-authoritative - a client call must not desync.
+	if (!HasAuthority())
+	{
+		return;
+	}
 	if (ShiftState == EShiftState::ShiftEnded)
 	{
 		return;
@@ -186,6 +196,12 @@ void AHoldoverGameState::EndShift()
 
 void AHoldoverGameState::RestartShift()
 {
+	// N5/N6: restarting is a post-verdict, server-only action. A mid-shift call
+	// must not roll the ledger or reset the running shift's counters.
+	if (!HasAuthority() || ShiftState != EShiftState::ShiftEnded)
+	{
+		return;
+	}
 	// DES-4: advance the shift number and update the running ledger.
 	++ShiftNumber;
 	TotalCompanyPay += Money;
@@ -207,6 +223,11 @@ void AHoldoverGameState::RestartShift()
 
 void AHoldoverGameState::RegisterDeparture(bool bOnTime, AHoldoverPlayerState* ResponsiblePlayer)
 {
+	// N6: shift state is server-authoritative - a client call must not desync.
+	if (!HasAuthority())
+	{
+		return;
+	}
 	// Sonnet H4: the ledger freezes at the verdict - post-EndShift departures
 	// must not move Money/Deductions under the already-computed PASSED/FAILED.
 	if (ShiftState != EShiftState::InProgress)
@@ -230,6 +251,11 @@ void AHoldoverGameState::RegisterDeparture(bool bOnTime, AHoldoverPlayerState* R
 
 void AHoldoverGameState::RegisterPenalty(int32 Amount, const FString& Reason, AHoldoverPlayerState* ResponsiblePlayer, EDispatchEvent Event)
 {
+	// N6: shift state is server-authoritative - a client call must not desync.
+	if (!HasAuthority())
+	{
+		return;
+	}
 	// Sonnet H4: penalties (holdover aborts, jet blast) stop at the verdict too.
 	if (ShiftState != EShiftState::InProgress || Amount <= 0)
 	{

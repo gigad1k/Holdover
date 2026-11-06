@@ -359,7 +359,7 @@ bool FHoldoverProfilePayRulesTest::RunTest(const FString& Parameters)
 	AHoldoverGameState* GS = NewObject<AHoldoverGameState>(GetTransientPackage());
 	GS->ShiftNumber = 4;
 	GS->StartShift(1.f, 1);
-	UHoldoverShiftData* Profile = GS->GetCurrentProfile();
+	const UHoldoverShiftData* Profile = GS->GetCurrentProfile();
 	if (!TestNotNull(TEXT("profile 4 resolved"), Profile))
 	{
 		return false;

@@ -184,7 +184,16 @@ void UHoldoverDepartureBoardWidget::NativeTick(const FGeometry& MyGeometry, floa
 		}
 		Text->SetFont(FCoreStyle::GetDefaultFontStyle(Rows[i].bBold ? TEXT("Bold") : TEXT("Regular"), Rows[i].Size));
 		Text->SetColorAndOpacity(FSlateColor(Rows[i].Color));
-		Text->SetText(FText::FromString(Rows[i].Text));
+		// N2: only SetText when the rebuilt string changed.
+		if (!LastRowTexts.IsValidIndex(i) || LastRowTexts[i] != Rows[i].Text)
+		{
+			Text->SetText(FText::FromString(Rows[i].Text));
+		}
+	}
+	LastRowTexts.Reset(Rows.Num());
+	for (const FRow& Row : Rows)
+	{
+		LastRowTexts.Add(Row.Text);
 	}
 }
 

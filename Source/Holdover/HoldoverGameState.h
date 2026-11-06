@@ -73,8 +73,11 @@ public:
 	/** DES-4: ensure profiles exist (creates built-in defaults if empty). */
 	void EnsureShiftProfiles();
 
-	/** DES-4: get the current shift's tuning (profiles[ShiftNumber-1] or ShiftData). */
-	UHoldoverShiftData* GetCurrentProfile() const;
+	/** DES-4: get the current shift's tuning (profiles[ShiftNumber-1] or ShiftData).
+	 *  N11: const - profiles are tuning data, not a mutation surface (and they
+	 *  only exist on the server; clients derive display values from the
+	 *  replicated shift fields). */
+	const UHoldoverShiftData* GetCurrentProfile() const;
 
 	/** DES-4: profile display name for the HUD/dispatcher. */
 	FString GetProfileName() const;

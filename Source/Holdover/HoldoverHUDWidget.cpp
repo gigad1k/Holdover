@@ -135,10 +135,16 @@ void UHoldoverHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	const AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
 	if (GS && ShiftLine)
 	{
-		ShiftLine->SetText(FText::FromString(FString::Printf(TEXT("SHIFT %d (%s)  %d/%d   time %.0fs   pay $%d   ded $%d   net $%d   ledger $%d"),
+		// N2: printf of 9 values per frame - only push the text when it changed.
+		FString Line = FString::Printf(TEXT("SHIFT %d (%s)  %d/%d   time %.0fs   pay $%d   ded $%d   net $%d   ledger $%d"),
 			GS->ShiftNumber, *GS->GetProfileName(),
 			GS->OnTimeDepartures, GS->Quota, GS->ShiftTimeRemaining,
-			GS->Money, GS->Deductions, GS->GetNetPay(), GS->CompanyLedger)));
+			GS->Money, GS->Deductions, GS->GetNetPay(), GS->CompanyLedger);
+		if (Line != LastShiftLine)
+		{
+			ShiftLine->SetText(FText::FromString(Line));
+			LastShiftLine = MoveTemp(Line);
+		}
 	}
 
 	// The results banner must never hide itself: a Collapsed UserWidget stops
@@ -157,8 +163,14 @@ void UHoldoverHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 	if (TreatmentLine)
 	{
 		FString Line = TEXT("");
-		const APawn* Pawn = GetOwningPlayer() ? GetOwningPlayer()->GetPawn() : nullptr;
-		if (const UHoldoverSprayComponent* Spray = Pawn ? Pawn->FindComponentByClass<UHoldoverSprayComponent>() : nullptr)
+		APawn* Pawn = GetOwningPlayer() ? GetOwningPlayer()->GetPawn() : nullptr;
+		// N2: FindComponentByClass per frame -> only when the pawn changes.
+		if (CachedHudPawn.Get() != Pawn)
+		{
+			CachedHudPawn = Pawn;
+			CachedHudSpray = Pawn ? Pawn->FindComponentByClass<UHoldoverSprayComponent>() : nullptr;
+		}
+		if (const UHoldoverSprayComponent* Spray = CachedHudSpray.Get())
 		{
 			const bool bTypeI = Spray->CarriedFluidType == EHoldoverFluidType::TypeI;
 			Line = FString::Printf(TEXT("%s   tank %.0f%%%s   weather %.0f%%"),
@@ -179,6 +191,10 @@ void UHoldoverHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTi
 				Line += FString::Printf(TEXT("   [%s]"), *Spray->TargetHint.ToString());
 			}
 		}
-		TreatmentLine->SetText(FText::FromString(Line));
+		if (Line != LastTreatmentLine)
+		{
+			TreatmentLine->SetText(FText::FromString(Line));
+			LastTreatmentLine = MoveTemp(Line);
+		}
 	}
 }

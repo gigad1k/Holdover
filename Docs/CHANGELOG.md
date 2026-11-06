@@ -1,5 +1,35 @@
 # CHANGELOG
 
+## 2026-11-06 - N2-N11: nit backlog
+- **N2:** HUD/board `SetText` only when the rebuilt string changed; the spray
+  component is re-found only when the possessed pawn changes (was per-frame
+  `FindComponentByClass` + full string rebuilds).
+- **N3:** the boom RPC is throttled to ~20 Hz (`SendBoomUpdate`) - input ran it
+  at 60-144 unreliable calls per second while a key was held (targets are
+  absolute, so intermediate sends are droppable).
+- **N4:** `ServerExit` teleports the driver beside the truck (it used to
+  re-appear at the spot it stood at ENTRY - mandatory before driving ships).
+  New `Holdover.Truck.ExitTeleport` fails before the fix.
+- **N5:** the restart interactable no longer double-resets aircraft
+  (`RestartShift` already does it), and its colour toggle is per-instance (was
+  a `static` shared by all). New `Holdover.Shift.RestartGuard` pins the guard.
+- **N6:** `StartShift`/`EndShift`/`RestartShift`/`RegisterDeparture`/
+  `RegisterPenalty` are server-only (`HasAuthority` guards, like
+  `SetWeatherSeverity`); `RestartShift` is additionally post-verdict only.
+- **N7:** the refill-station scan is cached (refresh when empty/stale) - the
+  client-callable RPC ran a `TActorIterator` per request.
+- **N8:** `Aircraft::Tick` no longer copies GameState tuning into the
+  EditAnywhere tuning properties every tick (clobbering designer edits);
+  `SimulateTreatment` reads through the GameState getters with the members as
+  fallback. New `Holdover.Treatment.AircraftTuningStays` fails before the fix.
+- **N9:** dropped unused `AIModule`/`StateTreeModule`/`GameplayStateTreeModule`
+  module deps (Build.cs + uproject).
+- **N10:** already done with M8 (eviction merged into `PawnLeavingGame`).
+- **N11:** `GetCurrentProfile()` returns `const UHoldoverShiftData*` - profiles
+  are tuning data, not a mutation surface.
+- New tests: `Holdover.Shift.RestartGuard`, `Holdover.Truck.ExitTeleport`,
+  `Holdover.Treatment.AircraftTuningStays`. Suite **39/39 pass**.
+
 ## 2026-11-06 - M14 remainder: audio hygiene
 - **M14 (remainder):** sound waves now load once and are held by the new
   `UHoldoverAudioSubsystem` (a `UGameInstanceSubsystem` cache; a cached miss
