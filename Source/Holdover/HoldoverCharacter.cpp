@@ -338,6 +338,13 @@ void AHoldoverCharacter::OnRep_SpeedScale()
 	ApplySpeedScale();
 }
 
+void AHoldoverCharacter::OnRep_IceScale()
+{
+	// M4: recompute (not just apply) so the local sprint state combines with
+	// the replicated ice multiplier into the same scale the server uses.
+	RecomputeSpeedScale();
+}
+
 void AHoldoverCharacter::SetVehicleHidden(bool bHiddenInVehicle)
 {
 	bVehicleHidden = bHiddenInVehicle;
@@ -359,6 +366,7 @@ void AHoldoverCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AHoldoverCharacter, SpeedScale);
+	DOREPLIFETIME(AHoldoverCharacter, IceScale);
 	DOREPLIFETIME(AHoldoverCharacter, bVehicleHidden);
 }
 

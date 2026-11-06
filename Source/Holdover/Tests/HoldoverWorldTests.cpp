@@ -148,6 +148,10 @@ bool FHoldoverReplicationContractTest::RunTest(const FString& Parameters)
 	// MP-2 (speed state) + MP-6 (vehicle hidden/collision).
 	TestReplicatedProperty(*this, Character, TEXT("SpeedScale"));
 	TestReplicatedProperty(*this, Character, TEXT("bVehicleHidden"));
+	// M4: the client's sprint prediction multiplies by IceScale — if it is not
+	// replicated the client predicts Base*Sprint while the server clamps to
+	// Base*Ice*Sprint (CMC corrections until OnRep_SpeedScale).
+	TestReplicatedProperty(*this, Character, TEXT("IceScale"));
 
 	// MP-1 (carried fluid) + tank/refill HUD state.
 	TestReplicatedProperty(*this, Spray, TEXT("FluidLevel"));
@@ -673,6 +677,7 @@ bool FHoldoverReplicationLintTest::RunTest(const FString& Parameters)
 	struct FEntry { const TCHAR* Cpp; const TCHAR* Cls; const TCHAR* Prop; };
 	static const FEntry Entries[] = {
 		{ TEXT("HoldoverCharacter.cpp"),        TEXT("AHoldoverCharacter"),        TEXT("SpeedScale") },
+		{ TEXT("HoldoverCharacter.cpp"),        TEXT("AHoldoverCharacter"),        TEXT("IceScale") },
 		{ TEXT("HoldoverCharacter.cpp"),        TEXT("AHoldoverCharacter"),        TEXT("bVehicleHidden") },
 		{ TEXT("HoldoverSprayComponent.cpp"),   TEXT("UHoldoverSprayComponent"),   TEXT("FluidLevel") },
 		{ TEXT("HoldoverSprayComponent.cpp"),   TEXT("UHoldoverSprayComponent"),   TEXT("CarriedFluidType") },

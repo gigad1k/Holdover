@@ -88,6 +88,11 @@ protected:
 	UFUNCTION()
 	void OnRep_SpeedScale();
 
+	/** M4: recomputes the local speed when the server's ice multiplier arrives,
+	 *  so a sprinting client predicts Base*Ice*Sprint exactly like the server. */
+	UFUNCTION()
+	void OnRep_IceScale();
+
 	UFUNCTION()
 	void OnRep_VehicleHidden();
 
@@ -107,7 +112,12 @@ protected:
 	bool bVehicleHidden = false;
 
 	bool bSprinting = false;
+
+	/** Server-set ice multiplier (hazard volumes). Replicated (M4) because the
+	 *  client's local sprint prediction multiplies by it. */
+	UPROPERTY(ReplicatedUsing = OnRep_IceScale)
 	float IceScale = 1.f;
+
 	float BaseWalkSpeed = 0.f;
 
 	/** Called from Input Actions for movement input */

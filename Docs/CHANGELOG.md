@@ -1,5 +1,14 @@
 # CHANGELOG
 
+## 2026-11-06 - M4: client sprint prediction sees the ice slowdown
+- **M4:** `IceScale` is now `UPROPERTY(ReplicatedUsing = OnRep_IceScale)` with a
+  `DOREPLIFETIME` registration; `OnRep_IceScale` recomputes the local speed so a
+  sprinting client predicts `Base * Ice * Sprint` exactly like the server
+  (previously the client predicted `Base * Sprint` and ate CMC corrections until
+  `OnRep_SpeedScale` landed). `Holdover.MP.ReplicationContract` +
+  `Holdover.MP.ReplicationLint` now pin the property and its registration.
+  Suite **31/31 pass**.
+
 ## 2026-11-02 - Sonnet review Mediums: test-runner + smoke-gate hardening
 - **M15 (`Tools/run_tests.ps1`):** the expected list held 7 of 31 names, so a
   deleted/renamed test outside it passed silently. Now lists all 31 (a new test
