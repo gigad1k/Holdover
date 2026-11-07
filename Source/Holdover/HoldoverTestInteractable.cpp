@@ -49,10 +49,8 @@ void AHoldoverTestInteractable::Interact_Implementation(AActor* Interactor)
 	AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
 	if (GS && GS->ShiftState == EShiftState::ShiftEnded)
 	{
-		for (TActorIterator<AHoldoverAircraft> It(GetWorld()); It; ++It)
-		{
-			It->ResetForNewShift();
-		}
+		// N5: RestartShift resets every aircraft itself - the old extra
+		// ResetForNewShift loop here was a duplicate.
 		GS->RestartShift();
 		UE_LOG(LogHoldover, Display, TEXT("Shift restarted via test interactable"));
 	}
@@ -63,11 +61,10 @@ void AHoldoverTestInteractable::Interact_Implementation(AActor* Interactor)
 	}
 
 	// Flip between two obvious colors so the effect is visible without any game art.
-	static bool bToggle = false;
-	bToggle = !bToggle;
+	bToggledColor = !bToggledColor;
 	if (DynamicMaterial)
 	{
 		DynamicMaterial->SetVectorParameterValue(TEXT("Color"),
-			bToggle ? FLinearColor::Green : FLinearColor(1.f, 0.5f, 0.f));
+			bToggledColor ? FLinearColor::Green : FLinearColor(1.f, 0.5f, 0.f));
 	}
 }

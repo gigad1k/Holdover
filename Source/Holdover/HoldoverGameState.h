@@ -73,8 +73,11 @@ public:
 	/** DES-4: ensure profiles exist (creates built-in defaults if empty). */
 	void EnsureShiftProfiles();
 
-	/** DES-4: get the current shift's tuning (profiles[ShiftNumber-1] or ShiftData). */
-	UHoldoverShiftData* GetCurrentProfile() const;
+	/** DES-4: get the current shift's tuning (profiles[ShiftNumber-1] or ShiftData).
+	 *  N11: const - profiles are tuning data, not a mutation surface (and they
+	 *  only exist on the server; clients derive display values from the
+	 *  replicated shift fields). */
+	const UHoldoverShiftData* GetCurrentProfile() const;
 
 	/** DES-4: profile display name for the HUD/dispatcher. */
 	FString GetProfileName() const;
@@ -113,6 +116,10 @@ public:
 	// --- dispatcher feed ---
 	UPROPERTY(ReplicatedUsing = OnRep_Dispatch, BlueprintReadOnly, Category = "Dispatch")
 	TArray<FText> DispatchFeed;
+
+	/** M14: true only when the feed grew since the last replicated update -
+	 *  the initial join replicate carries the whole feed and must not beep. */
+	bool ShouldPlayDispatchBeep();
 
 	// --- deterministic shift API (server; tests call directly) ---
 	void StartShift(float DurationSeconds, int32 InQuota);
@@ -153,6 +160,10 @@ protected:
 
 	UFUNCTION()
 	void OnRep_Dispatch();
+
+	/** M14: client-side feed-growth tracking for ShouldPlayDispatchBeep. */
+	bool bSeenDispatchFeed = false;
+	int32 LastSeenDispatchLen = 0;
 
 	/** G-5: replicated — a late joiner computing elapsed = duration - remaining
 	 *  must read the real duration, not the local default. */

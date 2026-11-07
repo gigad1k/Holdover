@@ -7,6 +7,7 @@
 #include "GameFramework/Character.h"
 #include "GameFramework/Pawn.h"
 #include "Holdover.h"
+#include "HoldoverAircraft.h"
 #include "HoldoverAudioLibrary.h"
 #include "HoldoverCharacter.h"
 #include "HoldoverSurfaceSection.h"
@@ -203,12 +204,26 @@ void UHoldoverSprayComponent::ServerSpray_Implementation(AHoldoverSurfaceSection
 	ServerApplySprayRequest(Target, DeltaSeconds);
 }
 
-bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* Target, float DeltaSeconds)
+bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* Target, float DeltaSeconds, double NowSeconds)
 {
 	AActor* Owner = GetOwner();
 	if (!Owner || !IsValid(Target))
 	{
 		return false;
+	}
+
+	// Sonnet M17: sections of a not-yet-arrived or already-departed aircraft
+	// must not be sprayable (a modified client can name any target).
+	if (const AHoldoverSurfaceSection* TargetSection = Cast<AHoldoverSurfaceSection>(Target))
+	{
+		if (const AHoldoverAircraft* Aircraft = TargetSection->OwningAircraft.Get())
+		{
+			if (!Aircraft->bArrived || Aircraft->bDeparted)
+			{
+				UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (aircraft not live): %s -> %s"), *Owner->GetName(), *Target->GetName());
+				return false;
+			}
+		}
 	}
 
 	// MP-8: never trust client dt — one RPC with dt=1000 must not clean a section.
@@ -245,13 +260,52 @@ bool UHoldoverSprayComponent::ServerApplySprayRequest(AHoldoverSurfaceSection* T
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverSprayLOS), false, Owner);
 	Params.AddIgnoredActor(Target);
+	// Sonnet M2: surface sections are separate BlockAll actors — a section whose
+	// centre sits behind a sibling panel (tail behind fuselage) is legitimately
+	// hittable, so the target's sibling panels must not block the server trace.
+	if (const AHoldoverSurfaceSection* M2TargetSection = Cast<AHoldoverSurfaceSection>(Target))
+	{
+		if (const AHoldoverAircraft* M2Aircraft = M2TargetSection->OwningAircraft.Get())
+		{
+			for (const AHoldoverSurfaceSection* Sibling : M2Aircraft->GetSections())
+			{
+				if (Sibling && Sibling != Target)
+				{
+					Params.AddIgnoredActor(Sibling);
+				}
+			}
+		}
+	}
 	if (Owner->GetWorld()->LineTraceSingleByChannel(Hit, Origin, Target->GetActorLocation(), ECC_Visibility, Params))
 	{
 		UE_LOG(LogHoldover, Warning, TEXT("Spray rejected (no line of sight): %s -> %s"), *Owner->GetName(), *Target->GetName());
 		return false;
 	}
 
-	return ApplySpray(Target, Dt);
+	// Sonnet M1: token bucket — spray time accrues at 1x real time, banked up to
+	// 2x the request interval. dt is already clamped per request; this bounds
+	// REQUESTS per second, so a 1000 RPC/s flood cannot overspeed treatment.
+	const double Now = NowSeconds >= 0.0 ? NowSeconds : (GetWorld() ? (double)GetWorld()->GetTimeSeconds() : 0.0);
+	const float Burst = SprayRequestInterval * 2.f;
+	if (LastSprayRateTime < 0.0)
+	{
+		SprayTimeAllowance = Burst;
+	}
+	else
+	{
+		const float Elapsed = (float)FMath::Clamp<double>(Now - LastSprayRateTime, 0.0, (double)Burst);
+		SprayTimeAllowance = FMath::Min(SprayTimeAllowance + Elapsed, Burst);
+	}
+	LastSprayRateTime = Now;
+	const float FinalDt = FMath::Min(Dt, SprayTimeAllowance);
+	if (FinalDt <= 0.f)
+	{
+		UE_LOG(LogHoldover, Verbose, TEXT("Spray rejected (rate limit): %s -> %s"), *Owner->GetName(), *Target->GetName());
+		return false;
+	}
+	SprayTimeAllowance -= FinalDt;
+
+	return ApplySpray(Target, FinalDt);
 }
 
 void UHoldoverSprayComponent::ServerBeginRefill_Implementation(EHoldoverFluidType NewType)
@@ -283,10 +337,22 @@ bool UHoldoverSprayComponent::ValidateAndBeginRefill(EHoldoverFluidType NewType)
 
 	// G-1: the RPC is client-callable, so station proximity is validated here,
 	// not only on the interact path. Same slack as ServerInteract's range check.
-	bool bNearStation = false;
-	for (TActorIterator<AHoldoverTestInteractable> It(Owner->GetWorld()); It; ++It)
+	// N7: cache the station scan (refresh when empty or stale).
+	const double Now = (double)GetWorld()->GetTimeSeconds();
+	if (CachedRefillStations.Num() == 0 || Now - LastStationScanTime > StationRescanSeconds)
 	{
-		if (FVector::DistSquared(Owner->GetActorLocation(), It->GetActorLocation()) <= FMath::Square(RefillStationRange))
+		CachedRefillStations.Reset();
+		for (TActorIterator<AHoldoverTestInteractable> It(Owner->GetWorld()); It; ++It)
+		{
+			CachedRefillStations.Add(*It);
+		}
+		LastStationScanTime = Now;
+	}
+	bool bNearStation = false;
+	for (const TWeakObjectPtr<AActor>& Station : CachedRefillStations)
+	{
+		if (Station.IsValid()
+			&& FVector::DistSquared(Owner->GetActorLocation(), Station->GetActorLocation()) <= FMath::Square(RefillStationRange))
 		{
 			bNearStation = true;
 			break;
@@ -309,6 +375,19 @@ bool UHoldoverSprayComponent::ValidateAndBeginRefill(EHoldoverFluidType NewType)
 		*GetNameSafe(Owner),
 		NewType == EHoldoverFluidType::TypeI ? TEXT("Type I") : TEXT("Type IV"),
 		Duration);
+
+	// Sonnet M10: mirror the fluid choice onto the player's PlayerState so the
+	// results screen shows the right tank tag instead of a stale default.
+	if (const APawn* Pawn = Cast<APawn>(Owner))
+	{
+		if (AController* Controller = Pawn->GetController())
+		{
+			if (AHoldoverPlayerState* PS = Controller->GetPlayerState<AHoldoverPlayerState>())
+			{
+				PS->SetCarriedFluid(NewType);
+			}
+		}
+	}
 	return true;
 }
 
@@ -318,7 +397,9 @@ void UHoldoverSprayComponent::GetLifetimeReplicatedProps(TArray<FLifetimePropert
 	DOREPLIFETIME(UHoldoverSprayComponent, FluidLevel);
 	DOREPLIFETIME(UHoldoverSprayComponent, CarriedFluidType);
 	DOREPLIFETIME(UHoldoverSprayComponent, bRefilling);
-	DOREPLIFETIME(UHoldoverSprayComponent, RefillTimeRemaining);
+	// Sonnet M3: only the owner's HUD shows the refill countdown - stop sending
+	// this float to every client every server tick.
+	DOREPLIFETIME_CONDITION(UHoldoverSprayComponent, RefillTimeRemaining, COND_OwnerOnly);
 }
 
 void UHoldoverSprayComponent::OnRep_Fluid()

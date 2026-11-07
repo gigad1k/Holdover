@@ -75,7 +75,7 @@ void AHoldoverGameState::EnsureShiftProfiles()
 	}
 }
 
-UHoldoverShiftData* AHoldoverGameState::GetCurrentProfile() const
+const UHoldoverShiftData* AHoldoverGameState::GetCurrentProfile() const
 {
 	if (ShiftProfiles.Num() > 0)
 	{
@@ -100,12 +100,21 @@ void AHoldoverGameState::SetWeatherSeverity(float NewSeverity)
 
 void AHoldoverGameState::StartShift(float DurationSeconds, int32 InQuota)
 {
+	// N6: shift state is server-authoritative - a client call must not desync.
+	if (!HasAuthority())
+	{
+		return;
+	}
 	// DES-4: use the current profile's spec when available.
 	EnsureShiftProfiles();
-	if (UHoldoverShiftData* Profile = GetCurrentProfile())
+	if (const UHoldoverShiftData* Profile = GetCurrentProfile())
 	{
 		LastShiftDuration = Profile->ShiftDuration;
 		Quota = Profile->ShiftQuota;
+		// Sonnet M13: the profile's pay rules were dead data - apply them so a
+		// profile that says "late costs 75" actually charges 75.
+		PayPerOnTimeDeparture = Profile->PayPerOnTimeDeparture;
+		LateDepartureDeduction = Profile->LateDepartureDeduction;
 	}
 	else
 	{
@@ -170,6 +179,11 @@ void AHoldoverGameState::TickShift(float DeltaSeconds)
 
 void AHoldoverGameState::EndShift()
 {
+	// N6: shift state is server-authoritative - a client call must not desync.
+	if (!HasAuthority())
+	{
+		return;
+	}
 	if (ShiftState == EShiftState::ShiftEnded)
 	{
 		return;
@@ -182,6 +196,12 @@ void AHoldoverGameState::EndShift()
 
 void AHoldoverGameState::RestartShift()
 {
+	// N5/N6: restarting is a post-verdict, server-only action. A mid-shift call
+	// must not roll the ledger or reset the running shift's counters.
+	if (!HasAuthority() || ShiftState != EShiftState::ShiftEnded)
+	{
+		return;
+	}
 	// DES-4: advance the shift number and update the running ledger.
 	++ShiftNumber;
 	TotalCompanyPay += Money;
@@ -203,6 +223,17 @@ void AHoldoverGameState::RestartShift()
 
 void AHoldoverGameState::RegisterDeparture(bool bOnTime, AHoldoverPlayerState* ResponsiblePlayer)
 {
+	// N6: shift state is server-authoritative - a client call must not desync.
+	if (!HasAuthority())
+	{
+		return;
+	}
+	// Sonnet H4: the ledger freezes at the verdict - post-EndShift departures
+	// must not move Money/Deductions under the already-computed PASSED/FAILED.
+	if (ShiftState != EShiftState::InProgress)
+	{
+		return;
+	}
 	const FString Who = ResponsiblePlayer ? ResponsiblePlayer->GetShortName() : TEXT("");
 	if (bOnTime)
 	{
@@ -220,7 +251,13 @@ void AHoldoverGameState::RegisterDeparture(bool bOnTime, AHoldoverPlayerState* R
 
 void AHoldoverGameState::RegisterPenalty(int32 Amount, const FString& Reason, AHoldoverPlayerState* ResponsiblePlayer, EDispatchEvent Event)
 {
-	if (Amount <= 0)
+	// N6: shift state is server-authoritative - a client call must not desync.
+	if (!HasAuthority())
+	{
+		return;
+	}
+	// Sonnet H4: penalties (holdover aborts, jet blast) stop at the verdict too.
+	if (ShiftState != EShiftState::InProgress || Amount <= 0)
 	{
 		return;
 	}
@@ -291,6 +328,12 @@ void AHoldoverGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(AHoldoverGameState, LastShiftDuration);
 	DOREPLIFETIME(AHoldoverGameState, PayPerOnTimeDeparture);
 	DOREPLIFETIME(AHoldoverGameState, LateDepartureDeduction);
+	// Sonnet H1: these are UPROPERTY(ReplicatedUsing) and were never registered,
+	// so clients kept the defaults (SHIFT 1 / ledger $0 forever).
+	DOREPLIFETIME(AHoldoverGameState, ShiftNumber);
+	DOREPLIFETIME(AHoldoverGameState, TotalCompanyPay);
+	DOREPLIFETIME(AHoldoverGameState, TotalCompanyDeductions);
+	DOREPLIFETIME(AHoldoverGameState, CompanyLedger);
 }
 
 void AHoldoverGameState::OnRep_Shift()
@@ -298,10 +341,27 @@ void AHoldoverGameState::OnRep_Shift()
 	// HUD reads the replicated values directly.
 }
 
+bool AHoldoverGameState::ShouldPlayDispatchBeep()
+{
+	// M14: the initial join replicate carries the whole feed - that is not
+	// news. After that, beep only when the feed grew.
+	const int32 NewLen = DispatchFeed.Num();
+	if (!bSeenDispatchFeed)
+	{
+		bSeenDispatchFeed = true;
+		LastSeenDispatchLen = NewLen;
+		return false;
+	}
+	const bool bGrew = NewLen > LastSeenDispatchLen;
+	LastSeenDispatchLen = NewLen;
+	return bGrew;
+}
+
 void AHoldoverGameState::OnRep_Dispatch()
 {
-	// Radio beep on clients for each replicated dispatch update.
-	if (GetWorld() && !HasAuthority())
+	// Radio beep on clients for each replicated dispatch update (M14: not on
+	// the initial join replicate, and only when the feed grew).
+	if (GetWorld() && !HasAuthority() && ShouldPlayDispatchBeep())
 	{
 		UHoldoverAudioLibrary::Play2D(this, FName("radio_beep"), 0.6f);
 	}

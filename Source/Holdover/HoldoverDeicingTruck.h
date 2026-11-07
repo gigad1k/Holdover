@@ -88,9 +88,12 @@ public:
 
 	AActor* GetOccupant() const { return OccupantCharacter.Get(); }
 
-	/** MP-3: restore the hidden occupant and clear occupancy. Idempotent; does not
-	 *  possess (exit owns re-possession). Called from Logout/unpossess/EndPlay paths. */
-	void EvictOccupant();
+	/** MP-3/M8: restore the hidden occupant and clear occupancy. Idempotent; does
+	 *  not possess (exit owns re-possession). bDestroyOrphan additionally
+	 *  destroys the abandoned occupant (the disconnect path - the engine would
+	 *  destroy any other leaving player's pawn). Called from the single
+	 *  disconnect path (PawnLeavingGame), plus OnRep_Controller/EndPlay. */
+	void EvictOccupant(bool bDestroyOrphan = false);
 
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void SetupPlayerInputComponent(UInputComponent* PlayerInputComponent) override;
@@ -109,6 +112,11 @@ protected:
 	float BoomYawAllowance = 0.f;
 	float BoomExtAllowance = 0.f;
 	double LastBoomRateTime = -1.0;
+
+	/** N3: cap the boom RPC to ~20 Hz (input runs at 60-144 Hz while held).
+	 *  Targets are absolute, so intermediate sends are droppable. */
+	double LastBoomSendTime = -1.0;
+	static constexpr double BoomSendInterval = 0.05;
 
 	UPROPERTY(Transient)
 	class UInputMappingContext* TruckContext;
@@ -129,6 +137,8 @@ protected:
 	void ApplyBoomTransform();
 	void YawBoom(float Direction);
 	void ExtendBoom(float Direction);
+	/** N3: throttled (~20 Hz) unreliable boom RPC send. */
+	void SendBoomUpdate();
 
 	// --- input handlers (Enhanced Input, (const FInputActionValue&) signatures) ---
 	void BoomYawLeft(const struct FInputActionValue& Value);

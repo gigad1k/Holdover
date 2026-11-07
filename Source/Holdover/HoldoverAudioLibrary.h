@@ -20,7 +20,11 @@ class HOLDOVER_API UHoldoverAudioLibrary : public UBlueprintFunctionLibrary
 	GENERATED_BODY()
 
 public:
-	/** Returns the sound wave at /Game/Holdover/Audio/<Name>, or null with a loud warning. */
+	/** M14: only machines with a listener play 2D audio (dedicated servers skip). */
+	static bool ShouldPlayAudio(ENetMode NetMode);
+
+	/** Returns the sound wave at /Game/Holdover/Audio/<Name>, or null with a loud warning.
+	 *  M14: cached via UHoldoverAudioSubsystem when a GameInstance is available. */
 	UFUNCTION(BlueprintCallable, Category = "Audio")
 	static USoundWave* LoadSound(UObject* WorldContextObject, FName Name);
 

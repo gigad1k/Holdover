@@ -107,9 +107,17 @@ if ($UatExit -ne 0) {
     exit 1
 }
 
-# Locate the packaged executable (archive layout: <ArchiveDir>\<Platform>\...).
-$Exe = Get-ChildItem -Path $ArchiveDir -Filter "Holdover.exe" -Recurse -ErrorAction SilentlyContinue |
-    Select-Object -First 1
+# Locate the packaged executable. Prefer the real game binary over the root
+# launcher stub (Sonnet M16: "first Holdover.exe found" is filesystem-order
+# dependent, and killing the stub may leave the child game running).
+$Exe = $null
+$StagedBin = Join-Path $ArchiveDir "Windows\Holdover\Binaries\Win64\Holdover.exe"
+if (Test-Path -LiteralPath $StagedBin) {
+    $Exe = Get-Item -LiteralPath $StagedBin
+} else {
+    $Exe = Get-ChildItem -Path $ArchiveDir -Filter "Holdover.exe" -Recurse -ErrorAction SilentlyContinue |
+        Select-Object -First 1
+}
 if (-not $Exe) {
     Write-Host "RESULT: FAIL - Holdover.exe not found under $ArchiveDir"
     exit 2
@@ -136,11 +144,16 @@ $GameArgs = @(
 )
 $Proc = Start-Process -FilePath $Exe.FullName -ArgumentList $GameArgs -PassThru
 Start-Sleep -Seconds $SmokeSeconds
-if (-not $Proc.HasExited) {
-    Stop-Process -Id $Proc.Id -Force
-    Write-Host "Smoke test: stopped the game after $SmokeSeconds s (was still running = good sign)"
+$ExitedEarly = $Proc.HasExited
+$EarlyExitCode = 0
+if ($ExitedEarly) {
+    $EarlyExitCode = $Proc.ExitCode
+    Write-Host "Smoke test: game exited on its own after $SmokeSeconds s with code $EarlyExitCode"
 } else {
-    Write-Host "Smoke test: game exited on its own after $SmokeSeconds s with code $($Proc.ExitCode)"
+    # Sonnet M16: kill the whole process tree - the launcher stub may have
+    # spawned the real game as a child.
+    & taskkill /PID $Proc.Id /T /F 2>$null | Out-Null
+    Write-Host "Smoke test: stopped the game tree after $SmokeSeconds s (was still running = good sign)"
 }
 
 if (-not (Test-Path $SmokeLog)) {
@@ -148,11 +161,40 @@ if (-not (Test-Path $SmokeLog)) {
     exit 2
 }
 
+# Sonnet M16: a hang before the map must not count as a pass - require positive
+# evidence that the game loaded the startup map and built the field manual.
+$MapLoaded = Select-String -Path $SmokeLog -Pattern "LoadMap: /Game/Holdover/Maps/L_RampGreybox" -ErrorAction SilentlyContinue
+$ManualBuilt = Select-String -Path $SmokeLog -Pattern "Field manual built" -ErrorAction SilentlyContinue
+if (-not $MapLoaded) {
+    Write-Host "RESULT: FAIL - smoke test never loaded L_RampGreybox (game hung or crashed before the map)"
+    exit 2
+}
+Write-Host "Smoke test: startup map loaded"
+if (-not $ManualBuilt) {
+    Write-Host "RESULT: FAIL - field manual was not built in the packaged game"
+    exit 2
+}
+Write-Host "Smoke test: field manual built in the packaged game"
+
 $FatalLines = Select-String -Path $SmokeLog -Pattern "Fatal error|Assertion failed|Critical error|appError called" -ErrorAction SilentlyContinue
 if ($FatalLines) {
     Write-Host "Smoke test: FATAL issues found in $($SmokeLog):"
     $FatalLines | ForEach-Object { Write-Host "  $($_.Line)" }
     Write-Host "RESULT: FAIL - packaged build crashed"
+    exit 2
+}
+
+# Sonnet M16: the two silent failure modes the gate used to ignore.
+$ContentErrors = Select-String -Path $SmokeLog -Pattern "PLACEHOLDER AUDIO MISSING|LogLinker: Error" -ErrorAction SilentlyContinue
+if ($ContentErrors) {
+    Write-Host "Smoke test: content errors found in $($SmokeLog):"
+    $ContentErrors | ForEach-Object { Write-Host "  $($_.Line)" }
+    Write-Host "RESULT: FAIL - packaged build is missing content"
+    exit 2
+}
+
+if ($ExitedEarly -and $EarlyExitCode -ne 0) {
+    Write-Host "RESULT: FAIL - packaged game exited early with code $EarlyExitCode"
     exit 2
 }
 

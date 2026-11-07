@@ -1,5 +1,36 @@
 # KNOWN ISSUES
 
+## Sonnet review 2026-11-02 — Medium backlog: DONE (2026-11-06)
+
+Full detail in `Docs/AI/SONNET_REVIEW_P7-10.md`. The 4 Highs and the cheap
+Mediums (M1-M3, M7, M9-M11, M13-M17-fixes, M15-M16, N1) were done 2026-11-02.
+The remaining AI-fixable items are now also done (one commit each, all on
+`origin/gigad1k/holdover`; tests 39/39; packaged smoke gate PASS — see
+`Docs/AI/STATUS.md` and `Docs/CHANGELOG.md`):
+
+- **M4 FIXED (`72aee56`)** — `IceScale` replicated; client sprint prediction
+  includes the ice clamp. Need playtest feel check (PIE).
+- **M5 FIXED (`1cec5f8`)** — ice slowdown is overlap-counted per character.
+- **M6 FIXED (`2c09dc8`)** — hazard launch prediction only on true clients,
+  deterministic directions (no more listen-host double launch / FRandRange
+  divergence). Need playtest feel check (2-player PIE).
+- **M8 FIXED (`7c7509d`)** — disconnecting truck occupant is destroyed with the
+  leaving controller; eviction merged into `PawnLeavingGame` (the
+  `GameMode::Logout` duplicate is gone). Needs 2-player disconnect check.
+- **M12 FIXED (`41bd70d`)** — departure board shows all arrived, non-departed
+  aircraft (one row-group each). Visual check needs a windowed run.
+- **M14 remainder FIXED (`19fd92e`)** — sounds cached in
+  `UHoldoverAudioSubsystem`, `Play2D` skipped on dedicated servers,
+  `OnRep_Dispatch` skips the initial join replicate. Residual: beeps still
+  under-play when the server batches `AddDispatch` (see Gameplay gaps).
+- **N2-N11 FIXED (`2ed4303`)** — HUD/board SetText-on-change, boom RPC ~20 Hz,
+  exit teleport beside the truck, restart interactable cleanup + post-verdict
+  `RestartShift`, shift-API authority guards, refill-station scan cache,
+  `Aircraft::Tick` no longer clobbers designer tuning, unused AI/StateTree deps
+  dropped (N9), `GetCurrentProfile()` const (N11). N10 was done with M8.
+  Residual (N3): `COND_SkipOwner` boom divergence while a key is held — see
+  `Docs/AI/STATUS.md` "Not fixed / caveats".
+
 ## Tooling / MCP
 - **`GetVisibleActors` only reports the editor world**, not PIE worlds — during PIE you cannot enumerate
   spawned pawns with it. Use `LogsToolset.GetLogEntries` for PIE evidence.
@@ -17,9 +48,9 @@
   the editor UI. A spawned DirectionalLight with positive pitch points AWAY from the scene and the
   whole map renders black (SkyAtmosphere computes a night sky). `Tools/build_ramp_greybox.py` maps
   `(pitch, yaw, roll)` explicitly via keywords — keep that convention.
-- **Every editor/commandlet start logs 2 "GameFeatureData / Asset Manager settings" errors**
-  (from the GameFeatures plugin enabled by AllToolsets). Harmless for development; silence by
-  adding a `GameFeatureData` PrimaryAssetTypesToScan entry if it becomes noisy.
+- **`GameFeatureData / Asset Manager settings` cook errors are FIXED** —
+  `Config/DefaultGame.ini` now carries the `PrimaryAssetTypesToScan` entry
+  (without it `package_win64.ps1`'s cook fails).
 - **`new_level` cannot overwrite an existing map asset and `delete_asset` silently fails to delete
   a just-saved map** (returns True, asset still exists). No `save_current_level_to`/`save_current_level_as`
   in this build's Python bindings. The builder is idempotent by loading + clearing + `save_current_level`.

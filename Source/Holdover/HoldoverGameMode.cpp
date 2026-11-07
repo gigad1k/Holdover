@@ -2,9 +2,7 @@
 
 #include "HoldoverGameMode.h"
 #include "EngineUtils.h"
-#include "GameFramework/Controller.h"
 #include "HoldoverAircraft.h"
-#include "HoldoverDeicingTruck.h"
 #include "HoldoverGameState.h"
 #include "HoldoverHUD.h"
 #include "HoldoverPlayerState.h"
@@ -32,17 +30,6 @@ void AHoldoverGameMode::BeginPlay()
 	}
 }
 
-void AHoldoverGameMode::Logout(AController* Exiting)
-{
-	// MP-3: a level-placed truck must never die as a connection's pawn. Evict the
-	// occupant and free the truck before controller cleanup runs.
-	if (Exiting)
-	{
-		if (AHoldoverDeicingTruck* Truck = Cast<AHoldoverDeicingTruck>(Exiting->GetPawn()))
-		{
-			Truck->EvictOccupant();
-			Exiting->UnPossess();
-		}
-	}
-	Super::Logout(Exiting);
-}
+// M8: truck-occupant eviction on disconnect lives in exactly one place -
+// AHoldoverPlayerController::PawnLeavingGame (the engine hook that also owns
+// protecting the level-placed truck from the default pawn teardown).

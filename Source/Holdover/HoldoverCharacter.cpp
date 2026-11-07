@@ -3,6 +3,7 @@
 #include "HoldoverCharacter.h"
 #include "Animation/AnimInstance.h"
 #include "Camera/CameraComponent.h"
+#include "Components/AudioComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "EnhancedInputComponent.h"
@@ -13,10 +14,12 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/PlayerController.h"
 #include "Holdover.h"
+#include "HoldoverAircraft.h"
 #include "HoldoverAudioLibrary.h"
 #include "HoldoverHUD.h"
 #include "HoldoverInteractableInterface.h"
 #include "HoldoverSprayComponent.h"
+#include "HoldoverSurfaceSection.h"
 #include "Net/UnrealNetwork.h"
 
 AHoldoverCharacter::AHoldoverCharacter()
@@ -74,7 +77,7 @@ void AHoldoverCharacter::BeginPlay()
 	// Wind ambience for the locally controlled player.
 	if (IsLocallyControlled())
 	{
-		UHoldoverAudioLibrary::Play2D(this, FName("wind_loop"), 0.5f, true);
+		WindLoopComponent = UHoldoverAudioLibrary::Play2D(this, FName("wind_loop"), 0.5f, true);
 	}
 }
 
@@ -222,6 +225,13 @@ void AHoldoverCharacter::UnPossessed()
 
 void AHoldoverCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+	// Sonnet M14: stop the looping wind ambience (it used to leak one loop per
+	// BeginPlay - respawn, PIE restart, travelling pawn).
+	if (WindLoopComponent)
+	{
+		WindLoopComponent->Stop();
+		WindLoopComponent = nullptr;
+	}
 	RemoveHoldoverInputContext();
 	Super::EndPlay(EndPlayReason);
 }
@@ -296,7 +306,21 @@ void AHoldoverCharacter::ServerSetSprint_Implementation(bool bEnabled)
 
 void AHoldoverCharacter::SetIceSlowed(bool bSlowed, float Multiplier)
 {
-	IceScale = bSlowed ? Multiplier : 1.f;
+	// M5: overlap-counted. Leaving one ice patch while still inside another must
+	// keep the slowdown; only the last release clears it.
+	if (bSlowed)
+	{
+		++IceOverlapCount;
+		IceScale = Multiplier;
+	}
+	else
+	{
+		IceOverlapCount = FMath::Max(0, IceOverlapCount - 1);
+		if (IceOverlapCount == 0)
+		{
+			IceScale = 1.f;
+		}
+	}
 	RecomputeSpeedScale();
 }
 
@@ -328,6 +352,13 @@ void AHoldoverCharacter::OnRep_SpeedScale()
 	ApplySpeedScale();
 }
 
+void AHoldoverCharacter::OnRep_IceScale()
+{
+	// M4: recompute (not just apply) so the local sprint state combines with
+	// the replicated ice multiplier into the same scale the server uses.
+	RecomputeSpeedScale();
+}
+
 void AHoldoverCharacter::SetVehicleHidden(bool bHiddenInVehicle)
 {
 	bVehicleHidden = bHiddenInVehicle;
@@ -349,6 +380,7 @@ void AHoldoverCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 	DOREPLIFETIME(AHoldoverCharacter, SpeedScale);
+	DOREPLIFETIME(AHoldoverCharacter, IceScale);
 	DOREPLIFETIME(AHoldoverCharacter, bVehicleHidden);
 }
 
@@ -400,6 +432,27 @@ bool AHoldoverCharacter::ValidateInteractTarget(const AActor* Caller, const AAct
 	FHitResult Hit;
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(HoldoverInteractLOS), false, Caller);
 	Params.AddIgnoredActor(Target);
+	// Sonnet M2: an aircraft's own surface panels are separate BlockAll actors
+	// and must not block an interact with the aircraft or with a sibling panel
+	// behind one of them (tail behind fuselage).
+	const AHoldoverAircraft* Aircraft = Cast<AHoldoverAircraft>(Target);
+	if (!Aircraft)
+	{
+		if (const AHoldoverSurfaceSection* Section = Cast<AHoldoverSurfaceSection>(Target))
+		{
+			Aircraft = Section->OwningAircraft.Get();
+		}
+	}
+	if (Aircraft)
+	{
+		for (const AHoldoverSurfaceSection* Panel : Aircraft->GetSections())
+		{
+			if (Panel && Panel != Target)
+			{
+				Params.AddIgnoredActor(Panel);
+			}
+		}
+	}
 	if (Caller->GetWorld()->LineTraceSingleByChannel(Hit, Caller->GetActorLocation(), Target->GetActorLocation(),
 		ECC_Visibility, Params))
 	{

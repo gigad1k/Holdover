@@ -43,25 +43,21 @@ _Last written 2026-11-02 at the end of Phase 10 no-human scope. Read this whole 
   fix, PROC-6 config hygiene.
 
 ## IN PROGRESS
-Nothing. Working tree clean at `9ad8c86`. Suite 26/26 green.
+**READY FOR ALI** — nothing AI-implementable is left. Tree clean at `5f5f869`
++ the NEEDS_ALI/STATUS consolidation commit. Suite 26/26 green; packaged build
+smoke-PASS. Legal text is labelled "DRAFT - not legal advice, needs Ali/lawyer
+review" (test-enforced). `Docs/AI/NEEDS_ALI.md` is ONE prioritised list
+(9 items, steps + minutes + follow-ups); `Docs/AI/STATUS.md` opens READY FOR ALI.
 
-## NEXT 5 STEPS (in order)
-1. **Ask Ali for `Docs/AI/NEEDS_ALI.md` #7** — the field-manual placeholders
-   (studio name, credits, copyright holder, EULA, feedback route). Until then the
-   credits/legal/feedback text carries `[[TODO:ALI]]` and
-   `Holdover.Info.CreditsLegalFeedback` asserts it is still there.
-2. **Human windowed play-through** (DEMO_CHECKLIST B1-B7) on the packaged build —
-   **including verifying the D1 auto-open** (see GOTCHAS: it cannot be verified
-   headless). This also covers B7 HUD readability, which overlaps NEEDS_ALI #2.
-3. **NEEDS_ALI #5** — 2-client and 3–4 player live MP sessions (C1-C5). Code-side
-   authority is automated; live sessions are the remaining Phase 9 evidence.
-4. **NEEDS_ALI #1** — DES-6 playtest gate. Gates the Phase 8 art sign-off.
-5. **NEEDS_ALI #2/#3/#4** — atmosphere look eyeball, `NS_SnowFlurry` snow emitter,
-   art assets. Then D6 trailer capture and D7 Steamworks (NEEDS_ALI #6).
-
-**There is no remaining AI-implementable work** in the current plan. Every
-DEMO_CHECKLIST item left is HUMAN, BLOCKED, or NEEDS_ALI. If Ali clears a queue
-item, pick up the corresponding row and re-enter the loop.
+## NEXT 5 STEPS (in order — mirrors NEEDS_ALI priorities)
+1. **NEEDS_ALI #1** — Ali plays one full shift on `Builds\Windows\Holdover.exe`
+   (~40 min), including F1 manual + auto-open check.
+2. **NEEDS_ALI #2** — DES-6 2-player gate (~90 min) → gates Phase 8 art.
+3. **NEEDS_ALI #3** — 3–4 player MP session (~45 min) → Phase 9 sign-off.
+4. **NEEDS_ALI #4/#5** — 6 field-manual placeholder values (~5 min) + legal
+   DRAFT review (~20 min).
+5. **NEEDS_ALI #6–#9** — atmosphere eyeball, `NS_SnowFlurry`, art assets,
+   Steamworks App ID.
 
 ## GOTCHAS (hard-won — read before touching builders, materials, or UMG)
 - **UMG `UUserWidget::NativeTick` does not run under the headless `-nullrhi` smoke

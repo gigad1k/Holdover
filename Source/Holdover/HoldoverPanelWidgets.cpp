@@ -52,15 +52,8 @@ TSharedRef<SWidget> UHoldoverDepartureBoardWidget::RebuildWidget()
 	if (!WidgetTree->RootWidget)
 	{
 		UBorder* Panel = MakeHoldoverPanel(this, TEXT("BoardPanel"));
-		UVerticalBox* Box = NewObject<UVerticalBox>(this, TEXT("BoardBox"), RF_Transient);
-		Panel->SetContent(Box);
-
-		StatusLine = MakeHoldoverText(this, TEXT("BoardStatus"), 16, FLinearColor::White);
-		TreatmentLine = MakeHoldoverText(this, TEXT("BoardTreatment"), 13, FLinearColor(0.8f, 0.9f, 1.f));
-		SectionLine = MakeHoldoverText(this, TEXT("BoardSections"), 13, FLinearColor(0.8f, 0.9f, 1.f));
-		Box->AddChildToVerticalBox(StatusLine);
-		Box->AddChildToVerticalBox(TreatmentLine);
-		Box->AddChildToVerticalBox(SectionLine);
+		RowBox = NewObject<UVerticalBox>(this, TEXT("BoardBox"), RF_Transient);
+		Panel->SetContent(RowBox);
 
 		WidgetTree->RootWidget = Panel;
 	}
@@ -72,54 +65,136 @@ void UHoldoverDepartureBoardWidget::NativeConstruct()
 	Super::NativeConstruct();
 }
 
+void UHoldoverDepartureBoardWidget::GatherBoardAircraft(UWorld* World, TArray<AHoldoverAircraft*>& OutAircraft)
+{
+	OutAircraft.Reset();
+	if (!World)
+	{
+		return;
+	}
+	for (TActorIterator<AHoldoverAircraft> It(World); It; ++It)
+	{
+		AHoldoverAircraft* Aircraft = *It;
+		// M12: every live aircraft gets a row - arrived and not yet departed.
+		// The old code cached the first iterator hit and broke, which with the
+		// two-plane shift could show a hidden, un-arrived or departed plane.
+		if (Aircraft && Aircraft->bArrived && !Aircraft->bDeparted)
+		{
+			OutAircraft.Add(Aircraft);
+		}
+	}
+}
+
 void UHoldoverDepartureBoardWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	FString Status = TEXT("Aircraft: none");
-	FString Treatment;
-	FString Sections;
+	TArray<AHoldoverAircraft*> AircraftList;
+	GatherBoardAircraft(GetWorld(), AircraftList);
 
-	AHoldoverAircraft* Aircraft = CachedAircraft.Get();
-	if (!Aircraft)
+	// One status/treatment/sections row-group per live aircraft (3 rows each).
+	struct FRow
 	{
-		for (TActorIterator<AHoldoverAircraft> It(GetWorld()); It; ++It)
+		FString Text;
+		FLinearColor Color = FLinearColor::White;
+		int32 Size = 13;
+		bool bBold = false;
+	};
+	TArray<FRow> Rows;
+
+	if (AircraftList.Num() == 0)
+	{
+		FRow Row;
+		Row.Text = TEXT("AIRCRAFT: none");
+		Row.Size = 16;
+		Row.bBold = true;
+		Rows.Add(MoveTemp(Row));
+		Rows.Add(FRow());
+		Rows.Add(FRow());
+	}
+	else
+	{
+		int32 Index = 1;
+		for (const AHoldoverAircraft* Aircraft : AircraftList)
 		{
-			Aircraft = *It;
-			break;
+			FRow Status;
+			Status.Text = FString::Printf(TEXT("AIRCRAFT %d: %s   holdover %.0fs"),
+				Index, BoardStateName(Aircraft->HoldoverState), Aircraft->HoldoverRemaining);
+			Status.Color = HoldoverStateColor(Aircraft->HoldoverState, Aircraft->HoldoverRemaining);
+			Status.Size = 16;
+			Status.bBold = true;
+			Rows.Add(MoveTemp(Status));
+
+			FRow Treatment;
+			Treatment.Text = FString::Printf(TEXT("clean %.0f%%   protection %.0f%%"),
+				Aircraft->GetOverallCleanliness(), Aircraft->GetOverallProtection());
+			Rows.Add(MoveTemp(Treatment));
+
+			FString Sections;
+			for (const AHoldoverSurfaceSection* Section : Aircraft->GetSections())
+			{
+				if (!Section)
+				{
+					continue;
+				}
+				if (!Sections.IsEmpty())
+				{
+					Sections += TEXT("  ");
+				}
+				Sections += FString::Printf(TEXT("%s %.0f/%.0f"),
+					*Section->SectionName.ToString(), Section->CleanlinessPercent, Section->ProtectionPercent);
+			}
+			FRow SectionRow;
+			SectionRow.Text = MoveTemp(Sections);
+			Rows.Add(MoveTemp(SectionRow));
+
+			++Index;
 		}
-		CachedAircraft = Aircraft;
 	}
 
-	if (Aircraft)
+	// Grow/shrink the pooled row widgets to match.
+	if (RowBox)
 	{
-		Status = FString::Printf(TEXT("AIRCRAFT: %s   holdover %.0fs"), BoardStateName(Aircraft->HoldoverState), Aircraft->HoldoverRemaining);
-		Treatment = FString::Printf(TEXT("clean %.0f%%   protection %.0f%%"),
-			Aircraft->GetOverallCleanliness(), Aircraft->GetOverallProtection());
-
-		for (const AHoldoverSurfaceSection* Section : Aircraft->GetSections())
+		while (RowPool.Num() < Rows.Num())
 		{
-			if (!Section)
+			// NAME_None: pooled rows are created and destroyed as aircraft come
+			// and go; named objects would collide with not-yet-GC'd old rows.
+			UTextBlock* Text = NewObject<UTextBlock>(this, NAME_None, RF_Transient);
+			Text->SetFont(FCoreStyle::GetDefaultFontStyle("Bold", 13));
+			Text->SetColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.9f, 1.f)));
+			RowPool.Add(Text);
+			RowBox->AddChildToVerticalBox(Text);
+		}
+		while (RowPool.Num() > Rows.Num())
+		{
+			UTextBlock* Text = RowPool.Pop();
+			if (Text)
 			{
-				continue;
+				RowBox->RemoveChild(Text);
 			}
-			if (!Sections.IsEmpty())
-			{
-				Sections += TEXT("  ");
-			}
-			Sections += FString::Printf(TEXT("%s %.0f/%.0f"),
-				*Section->SectionName.ToString(), Section->CleanlinessPercent, Section->ProtectionPercent);
 		}
 	}
-	if (StatusLine)
+
+	for (int32 i = 0; i < Rows.Num(); ++i)
 	{
-		StatusLine->SetText(FText::FromString(Status));
-		StatusLine->SetColorAndOpacity(FSlateColor(HoldoverStateColor(
-			Aircraft ? Aircraft->HoldoverState : EHoldoverState::Incomplete,
-			Aircraft ? Aircraft->HoldoverRemaining : 0.f)));
+		UTextBlock* Text = RowPool.IsValidIndex(i) ? RowPool[i].Get() : nullptr;
+		if (!Text)
+		{
+			continue;
+		}
+		Text->SetFont(FCoreStyle::GetDefaultFontStyle(Rows[i].bBold ? TEXT("Bold") : TEXT("Regular"), Rows[i].Size));
+		Text->SetColorAndOpacity(FSlateColor(Rows[i].Color));
+		// N2: only SetText when the rebuilt string changed.
+		if (!LastRowTexts.IsValidIndex(i) || LastRowTexts[i] != Rows[i].Text)
+		{
+			Text->SetText(FText::FromString(Rows[i].Text));
+		}
 	}
-	if (TreatmentLine) { TreatmentLine->SetText(FText::FromString(Treatment)); }
-	if (SectionLine) { SectionLine->SetText(FText::FromString(Sections)); }
+	LastRowTexts.Reset(Rows.Num());
+	for (const FRow& Row : Rows)
+	{
+		LastRowTexts.Add(Row.Text);
+	}
 }
 
 FLinearColor UHoldoverDepartureBoardWidget::HoldoverStateColor(EHoldoverState State, float RemainingSeconds)
@@ -241,17 +316,19 @@ void UHoldoverShiftResultsWidget::NativeTick(const FGeometry& MyGeometry, float 
 	}
 
 	// DES-2: per-player attribution on the results screen.
+	// Sonnet M9: iterate the GameState's PlayerArray - a client only has its own
+	// controller, so the old controller iterator showed one row on clients.
 	if (GetWorld() && PlayerLines.Num() > 0)
 	{
 		int32 LineIndex = 0;
-		for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It && LineIndex < MaxPlayerLines; ++It)
+		const TArray<APlayerState*>& Players = GS ? GS->PlayerArray : TArray<APlayerState*>();
+		for (APlayerState* PSBase : Players)
 		{
-			const APlayerController* PC = It->Get();
-			if (!PC)
+			if (LineIndex >= MaxPlayerLines)
 			{
-				continue;
+				break;
 			}
-			const AHoldoverPlayerState* PS = PC->GetPlayerState<AHoldoverPlayerState>();
+			const AHoldoverPlayerState* PS = Cast<AHoldoverPlayerState>(PSBase);
 			if (!PS)
 			{
 				continue;

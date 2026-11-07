@@ -46,6 +46,13 @@ void AHoldoverAircraft::Interact_Implementation(AActor* Interactor)
 
 	AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
 
+	// Sonnet H4: no departures after the verdict — the ledger is frozen and the
+	// results banner must not drift from the computed PASSED/FAILED.
+	if (GS && GS->ShiftState != EShiftState::InProgress)
+	{
+		return;
+	}
+
 	// SIM-4: per-aircraft deadline — late if past the deadline OR the shift is over.
 	const bool bOnTime = GS
 		&& GS->ShiftState == EShiftState::InProgress
@@ -90,6 +97,7 @@ bool AHoldoverAircraft::TryDepart()
 	}
 	bDeparted = true;
 	HoldoverState = EHoldoverState::Departed;
+	SyncArrivalVisuals();
 	return true;
 }
 
@@ -101,8 +109,7 @@ void AHoldoverAircraft::ResetForNewShift()
 	HoldoverState = EHoldoverState::Incomplete;
 	HoldoverRemaining = 0.f;
 	SetActorLocation(SpawnLocation);
-	SetActorHiddenInGame(!bArrived);
-	SetActorEnableCollision(bArrived);
+	SyncArrivalVisuals();
 	for (AHoldoverSurfaceSection* Section : Sections)
 	{
 		if (Section)
@@ -130,13 +137,15 @@ void AHoldoverAircraft::BeginPlay()
 
 	SpawnLocation = GetActorLocation();
 
-	// DES-1: staggered arrivals. A delayed aircraft is parked offscreen until it arrives.
-	bArrived = ArrivalDelay <= 0.f;
-	if (!bArrived)
+	// H2: only the authority initialises the replicated arrival flag. Clients
+	// must not write it (doing so raced the initial replication and left late
+	// joiners with a permanently hidden aircraft); they re-derive visuals from
+	// the replicated value instead.
+	if (HasAuthority())
 	{
-		SetActorHiddenInGame(true);
-		SetActorEnableCollision(false);
+		bArrived = ArrivalDelay <= 0.f;
 	}
+	SyncArrivalVisuals();
 
 	// SIM-5: radius-gather only claims sections with no explicit owner.
 	for (TActorIterator<AHoldoverSurfaceSection> It(GetWorld()); It; ++It)
@@ -152,6 +161,25 @@ void AHoldoverAircraft::BeginPlay()
 
 	UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' registered %d surface sections (arrival delay %.1fs)"),
 		*GetName(), Sections.Num(), ArrivalDelay);
+}
+
+void AHoldoverAircraft::SyncArrivalVisuals()
+{
+	// Aircraft visibility follows arrival; a departed plane stays visible so its
+	// climb-out cue can play. Sonnet M17: the sections are separate actors that
+	// do not follow the aircraft — hide them together with arrival/departure so
+	// nothing is left floating, visible and sprayable behind.
+	SetActorHiddenInGame(!bArrived);
+	SetActorEnableCollision(bArrived);
+	const bool bShowSections = bArrived && !bDeparted;
+	for (AHoldoverSurfaceSection* Section : Sections)
+	{
+		if (Section)
+		{
+			Section->SetActorHiddenInGame(!bShowSections);
+			Section->SetActorEnableCollision(bShowSections);
+		}
+	}
 }
 
 void AHoldoverAircraft::Tick(float DeltaSeconds)
@@ -170,6 +198,18 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 		return;
 	}
 
+	// Sonnet H4: treatment and arrivals stop at the shift verdict. Without this,
+	// un-arrived aircraft "arrive" post-EndShift (Elapsed == duration fires the
+	// arrival dispatch) and SimulateTreatment keeps aborting holdovers into
+	// RegisterPenalty after the results are frozen.
+	if (const AHoldoverGameState* GSCheck = GetWorld()->GetGameState<AHoldoverGameState>())
+	{
+		if (GSCheck->ShiftState != EShiftState::InProgress)
+		{
+			return;
+		}
+	}
+
 	// DES-1: staggered arrival — the plane appears once the shift clock passes its delay.
 	if (!bArrived)
 	{
@@ -178,8 +218,7 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 		if (Elapsed >= ArrivalDelay)
 		{
 			bArrived = true;
-			SetActorHiddenInGame(false);
-			SetActorEnableCollision(true);
+			SyncArrivalVisuals();
 			ArrivalTime = GetWorld()->GetTimeSeconds();
 			UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s' has ARRIVED"), *GetName());
 			if (AHoldoverGameState* GSW = GetWorld()->GetGameState<AHoldoverGameState>())
@@ -194,14 +233,9 @@ void AHoldoverAircraft::Tick(float DeltaSeconds)
 	if (const AHoldoverGameState* GS = GetWorld()->GetGameState<AHoldoverGameState>())
 	{
 		Weather = GS->WeatherSeverity;
-
-		// DES-5: sync tuning from the shift data asset (local defaults as fallback).
-		HoldoverDuration = GS->GetHoldoverDuration();
-		WeatherBurnMultiplier = GS->GetWeatherBurnMultiplier();
-		ProtectionDegradationPerSecond = GS->GetProtectionDegradationPerSecond();
-		HoldoverDegradationScale = GS->GetHoldoverDegradationScale();
-		ReContaminationRatePerSecond = GS->GetReContaminationRatePerSecond();
-		ReContaminationProtectionThreshold = GS->GetReContaminationProtectionThreshold();
+		// N8: tuning used to be copied from the GameState into the EditAnywhere
+		// properties here every tick, clobbering designer edits. SimulateTreatment
+		// now reads through the GameState getters instead (properties = fallback).
 	}
 	SimulateTreatment(DeltaSeconds, Weather);
 }
@@ -295,11 +329,22 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	}
 	const float Weather = FMath::Clamp(WeatherSeverity, 0.f, 1.f);
 
+	// N8/DES-5: tuning flows through the GameState's shift data; the
+	// EditAnywhere members are per-aircraft designer fallbacks and are never
+	// overwritten (Tick used to copy the GameState values over them).
+	const AHoldoverGameState* TuningGS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr;
+	const float HoldoverDurationEff = TuningGS ? TuningGS->GetHoldoverDuration() : HoldoverDuration;
+	const float WeatherBurnEff = TuningGS ? TuningGS->GetWeatherBurnMultiplier() : WeatherBurnMultiplier;
+	const float DegradationPerSecEff = TuningGS ? TuningGS->GetProtectionDegradationPerSecond() : ProtectionDegradationPerSecond;
+	const float DegScaleEff = TuningGS ? TuningGS->GetHoldoverDegradationScale() : HoldoverDegradationScale;
+	const float ReContaminationRateEff = TuningGS ? TuningGS->GetReContaminationRatePerSecond() : ReContaminationRatePerSecond;
+	const float ReContaminationThresholdEff = TuningGS ? TuningGS->GetReContaminationProtectionThreshold() : ReContaminationProtectionThreshold;
+
 	// SIM-2: degradation is paused (or slowed) during an active holdover so
 	// expiry is the clock players actually fight, not the abort.
 	const bool bInHoldover = (HoldoverState == EHoldoverState::HoldoverActive);
-	const float DegScale = bInHoldover ? HoldoverDegradationScale : 1.f;
-	const float Degradation = ProtectionDegradationPerSecond * Weather * DegScale * DeltaSeconds;
+	const float DegScale = bInHoldover ? DegScaleEff : 1.f;
+	const float Degradation = DegradationPerSecEff * Weather * DegScale * DeltaSeconds;
 	for (AHoldoverSurfaceSection* Section : Sections)
 	{
 		if (Section)
@@ -309,12 +354,12 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	}
 
 	// SIM-3: precipitation re-contaminates unprotected sections.
-	if (ReContaminationRatePerSecond > 0.f && Weather > 0.f)
+	if (ReContaminationRateEff > 0.f && Weather > 0.f)
 	{
-		const float Contamination = ReContaminationRatePerSecond * Weather * DeltaSeconds;
+		const float Contamination = ReContaminationRateEff * Weather * DeltaSeconds;
 		for (AHoldoverSurfaceSection* Section : Sections)
 		{
-			if (Section && Section->ProtectionPercent < ReContaminationProtectionThreshold)
+			if (Section && Section->ProtectionPercent < ReContaminationThresholdEff)
 			{
 				Section->ApplyContamination(Contamination);
 			}
@@ -326,7 +371,7 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	if (HoldoverState == EHoldoverState::Incomplete && AreAllSectionsCleanAndProtected())
 	{
 		HoldoverState = EHoldoverState::HoldoverActive;
-		HoldoverRemaining = HoldoverDuration;
+		HoldoverRemaining = HoldoverDurationEff;
 		bJustStarted = true;
 		UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover started (%.0fs)"), *GetName(), HoldoverRemaining);
 		if (AHoldoverGameState* GS = GetWorld() ? GetWorld()->GetGameState<AHoldoverGameState>() : nullptr)
@@ -351,7 +396,7 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 		}
 		else
 		{
-			HoldoverRemaining -= DeltaSeconds * (1.f + Weather * WeatherBurnMultiplier);
+			HoldoverRemaining -= DeltaSeconds * (1.f + Weather * WeatherBurnEff);
 			if (HoldoverRemaining <= 0.f)
 			{
 				HoldoverRemaining = 0.f;
@@ -376,7 +421,7 @@ void AHoldoverAircraft::SimulateTreatment(float DeltaSeconds, float WeatherSever
 	{
 		// Valid retreatment after expiry: restart the clock.
 		HoldoverState = EHoldoverState::HoldoverActive;
-		HoldoverRemaining = HoldoverDuration;
+		HoldoverRemaining = HoldoverDurationEff;
 		UE_LOG(LogHoldover, Display, TEXT("Aircraft '%s': holdover restarted after retreatment"), *GetName());
 	}
 }
@@ -397,6 +442,5 @@ void AHoldoverAircraft::OnRep_Holdover()
 
 void AHoldoverAircraft::OnRep_Arrived()
 {
-	SetActorHiddenInGame(!bArrived);
-	SetActorEnableCollision(bArrived);
+	SyncArrivalVisuals();
 }

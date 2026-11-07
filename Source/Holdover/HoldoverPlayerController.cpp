@@ -19,13 +19,15 @@ AHoldoverPlayerController::AHoldoverPlayerController()
 
 void AHoldoverPlayerController::PawnLeavingGame()
 {
-	// MP-3: on disconnect the engine destroys the connection's pawn — when the
-	// driver was in the deicing truck, that pawn is the LEVEL-PLACED truck.
-	// Evict the occupant and detach so the truck survives for everyone else.
+	// MP-3/M8: on disconnect the engine destroys the connection's pawn - when
+	// the driver was in the deicing truck, that pawn is the LEVEL-PLACED truck.
+	// Evict the occupant (destroying it, since its owner is leaving) and detach
+	// so the default teardown cannot destroy the truck. This is the single
+	// eviction path on disconnect - GameMode::Logout used to duplicate it.
 	if (AHoldoverDeicingTruck* Truck = Cast<AHoldoverDeicingTruck>(GetPawn()))
 	{
-		UE_LOG(LogHoldover, Display, TEXT("PawnLeavingGame: saving truck %s (MP-3)"), *GetNameSafe(Truck));
-		Truck->EvictOccupant();
+		UE_LOG(LogHoldover, Display, TEXT("PawnLeavingGame: saving truck %s (MP-3/M8)"), *GetNameSafe(Truck));
+		Truck->EvictOccupant(/*bDestroyOrphan*/ true);
 		UnPossess();
 	}
 	Super::PawnLeavingGame();

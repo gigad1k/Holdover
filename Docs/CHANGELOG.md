@@ -1,5 +1,218 @@
 # CHANGELOG
 
+## 2026-11-06 - backlog complete: packaged smoke gate PASS + docs
+- Packaged Win64 Development build re-verified with the strict smoke gate
+  (`Tools/package_win64.ps1`): `LoadMap: L_RampGreybox` + `Field manual built`
+  evidence present, process tree killed cleanly, 0 fatals, 0 content errors.
+- Suite **39/39** (`Tools/run_tests.ps1`, full expected list).
+- `Docs/AI/STATUS.md` rewritten READY FOR ALI (fix list with commit ids, what
+  needs play-testing, residual caveats); `Docs/KNOWN_ISSUES.md` Medium backlog
+  marked DONE. The full Sonnet-review backlog (M4-M6, M8, M12, M14 remainder,
+  N2-N11) is now closed.
+
+## 2026-11-06 - N2-N11: nit backlog
+- **N2:** HUD/board `SetText` only when the rebuilt string changed; the spray
+  component is re-found only when the possessed pawn changes (was per-frame
+  `FindComponentByClass` + full string rebuilds).
+- **N3:** the boom RPC is throttled to ~20 Hz (`SendBoomUpdate`) - input ran it
+  at 60-144 unreliable calls per second while a key was held (targets are
+  absolute, so intermediate sends are droppable).
+- **N4:** `ServerExit` teleports the driver beside the truck (it used to
+  re-appear at the spot it stood at ENTRY - mandatory before driving ships).
+  New `Holdover.Truck.ExitTeleport` fails before the fix.
+- **N5:** the restart interactable no longer double-resets aircraft
+  (`RestartShift` already does it), and its colour toggle is per-instance (was
+  a `static` shared by all). New `Holdover.Shift.RestartGuard` pins the guard.
+- **N6:** `StartShift`/`EndShift`/`RestartShift`/`RegisterDeparture`/
+  `RegisterPenalty` are server-only (`HasAuthority` guards, like
+  `SetWeatherSeverity`); `RestartShift` is additionally post-verdict only.
+- **N7:** the refill-station scan is cached (refresh when empty/stale) - the
+  client-callable RPC ran a `TActorIterator` per request.
+- **N8:** `Aircraft::Tick` no longer copies GameState tuning into the
+  EditAnywhere tuning properties every tick (clobbering designer edits);
+  `SimulateTreatment` reads through the GameState getters with the members as
+  fallback. New `Holdover.Treatment.AircraftTuningStays` fails before the fix.
+- **N9:** dropped unused `AIModule`/`StateTreeModule`/`GameplayStateTreeModule`
+  module deps (Build.cs + uproject).
+- **N10:** already done with M8 (eviction merged into `PawnLeavingGame`).
+- **N11:** `GetCurrentProfile()` returns `const UHoldoverShiftData*` - profiles
+  are tuning data, not a mutation surface.
+- New tests: `Holdover.Shift.RestartGuard`, `Holdover.Truck.ExitTeleport`,
+  `Holdover.Treatment.AircraftTuningStays`. Suite **39/39 pass**.
+
+## 2026-11-06 - M14 remainder: audio hygiene
+- **M14 (remainder):** sound waves now load once and are held by the new
+  `UHoldoverAudioSubsystem` (a `UGameInstanceSubsystem` cache; a cached miss
+  also stops the per-call `PLACEHOLDER AUDIO MISSING` warning spam).
+  `Play2D` skips entirely on dedicated servers (`ShouldPlayAudio`), and
+  `OnRep_Dispatch` no longer beeps on the initial join replicate of the whole
+  feed (`ShouldPlayDispatchBeep` - beep only when the feed grew). New
+  `Holdover.Audio.Hygiene` pins all three. Suite **36/36 pass**.
+
+## 2026-11-06 - M12: departure board shows every live aircraft
+- **M12:** the board cached the first `TActorIterator<AHoldoverAircraft>` hit
+  and `break`ed - with the two-plane shift it could show a hidden, un-arrived
+  or already-departed plane. `GatherBoardAircraft` now selects ALL arrived,
+  non-departed aircraft and the board renders one status/treatment/sections
+  row-group each (pooled `UTextBlock`s, `NAME_None` names). New
+  `Holdover.UI.DepartureBoardRows` pins the selection incl. the empty case.
+  Suite **35/35 pass**. (Rows are built in `NativeTick`, so the visual pass
+  still needs Ali's windowed run - UMG ticks do not run under `-nullrhi`.)
+
+## 2026-11-06 - M8: disconnecting truck occupant no longer leaves an orphan
+- **M8:** on disconnect the abandoned occupant (the player's original pawn,
+  unpossessed at truck entry) used to stay standing in the world uncontrolled.
+  `EvictOccupant(bDestroyOrphan)` now destroys it on the leaving path, exactly
+  like the engine destroys any other disconnecting player's pawn. The duplicated
+  eviction in `GameMode::Logout` is gone - `PlayerController::PawnLeavingGame`
+  is the single disconnect path (it also owns protecting the level-placed truck
+  from the default `PawnLeavingGame` teardown). OnRep/EndPlay eviction keeps
+  its no-destroy semantics. New `Holdover.Truck.OccupantEviction` fails before
+  the fix ("orphan occupant destroyed on disconnect" - it was still alive).
+  Suite **34/34 pass**.
+
+## 2026-11-06 - M6: hazard launch prediction gated and deterministic
+- **M6:** the locally controlled client predicts the hazard launch only when it
+  is NOT the authority (`ShouldPredictLaunch`) - on a listen host the authority
+  launch already runs in the same frame, so predicting too launched twice (the
+  second overwrote the first). The ice stumble used to draw its own
+  `FRandRange` on each side, so client prediction and the server launch never
+  matched; both the stumble and jet-blast directions are now deterministic
+  shared formulas. The collision cue still plays locally in every seat.
+  New `Holdover.Hazard.JetBlastPrediction` drives the real overlap entry point
+  in the listen-host seat (possessed pawn in a standalone test world) and pins
+  the gate matrix + both directions. Overlap behaviour is exposed as
+  `HandleBeginOverlap`/`HandleEndOverlap` (the UFUNCTIONs forward to it).
+  Suite **33/33 pass**.
+
+## 2026-11-06 - M5: ice slowdown is overlap-counted
+- **M5:** `SetIceSlowed` is now a per-character overlap counter — leaving one
+  ice patch while still inside another keeps the slowdown; only the last
+  release clears it (unbalanced releases are clamped at zero). New
+  `Holdover.Hazard.IceOverlapCount` drives the exact begin/end calls the hazard
+  volumes make and fails before the fix ("still slowed ... expected 300 but was
+  600"). New `Tests/HoldoverTestFixtures.h` adds a spawnable
+  `AHoldoverTestCharacter` (the game classes stay abstract; tests used to be
+  limited to CDOs). Suite **32/32 pass**.
+
+## 2026-11-06 - M4: client sprint prediction sees the ice slowdown
+- **M4:** `IceScale` is now `UPROPERTY(ReplicatedUsing = OnRep_IceScale)` with a
+  `DOREPLIFETIME` registration; `OnRep_IceScale` recomputes the local speed so a
+  sprinting client predicts `Base * Ice * Sprint` exactly like the server
+  (previously the client predicted `Base * Sprint` and ate CMC corrections until
+  `OnRep_SpeedScale` landed). `Holdover.MP.ReplicationContract` +
+  `Holdover.MP.ReplicationLint` now pin the property and its registration.
+  Suite **31/31 pass**.
+
+## 2026-11-02 - Sonnet review Mediums: test-runner + smoke-gate hardening
+- **M15 (`Tools/run_tests.ps1`):** the expected list held 7 of 31 names, so a
+  deleted/renamed test outside it passed silently. Now lists all 31 (a new test
+  must be added there), asserts the engine performed at least the expected count
+  (catches cut-short runs), defaults `$UEPath` to the real UE 5.8 install (the
+  `D:\Gamez` default never existed), and throws instead of falling back to a
+  hardcoded `D:\Projects` path. Verified: 31/31 expected-pass.
+- **M16 (`Tools/package_win64.ps1`):** the smoke gate now picks the real game
+  binary (`Holdover\Binaries\Win64\Holdover.exe`, not whichever stub is found
+  first), kills the whole process tree (`taskkill /T`), requires positive
+  evidence (`LoadMap: L_RampGreybox` + `Field manual built`) so a hang before
+  the map cannot pass, and fails on `PLACEHOLDER AUDIO MISSING` /
+  `LogLinker: Error` / early non-zero exit. Verified: strict gate PASS.
+
+## 2026-11-02 - Sonnet review Mediums: cheap fixes batch
+- **M2:** server LOS traces now ignore the target's sibling surface panels
+  (spray + interact) — a panel behind its own aircraft's other panels (tail
+  behind fuselage) is legitimately hittable and was falsely rejected.
+- **M3:** `RefillTimeRemaining` replicates `COND_OwnerOnly` (only the owner's HUD
+  shows the countdown) — no more per-tick float to every client.
+- **M7:** jet-blast cooldown map prunes stale weak keys on insert.
+- **M9:** results screen iterates `GS->PlayerArray` (a client saw only its own
+  row via the controller iterator).
+- **M10:** `ValidateAndBeginRefill` mirrors the fluid choice onto the owner's
+  `AHoldoverPlayerState::SetCarriedFluid` — the results "[Type I/IV]" tag was
+  permanently wrong (the setter had no callers).
+- **M11:** field-manual `RefreshContent` clears ALL children except the title
+  (headings used to accumulate per refresh) and garbage-collects the old widgets
+  so rebuilt object names are free.
+- **M13:** `StartShift` now applies the profile's `PayPerOnTimeDeparture` /
+  `LateDepartureDeduction` — they were dead data (profile pay rules ignored).
+- **M14 (leak half):** the looping wind ambience is held and stopped in
+  `EndPlay` (it used to leak one loop per respawn/PIE restart).
+- **M17 (server half):** `ServerApplySprayRequest` rejects targets whose owning
+  aircraft is not arrived or already departed.
+- **N1:** the deicing truck no longer ticks (its Tick was empty).
+- New tests: `Holdover.MP.SectionTargetValidation` (M2/M17),
+  `Holdover.Treatment.ProfilePayRules` (M13). Suite **31/31 pass**.
+
+## 2026-11-02 - Sonnet review H4: shift ledger freezes at the verdict
+- **H4 (verified real):** after `EndShift` froze `bShiftPassed`, the ledger kept
+  moving — post-verdict departures registered as late (deductions),
+  SimulateTreatment kept running (holdover aborts → RegisterPenalty), and every
+  un-arrived aircraft "arrived" at EndShift (`Elapsed == duration`), firing
+  dispatch events. The results banner could show net pay inconsistent with the
+  PASSED/FAILED verdict.
+- Fixes: `RegisterDeparture`/`RegisterPenalty` no-op unless `ShiftState ==
+  InProgress` (covers hazard penalties and aborts too); `Aircraft::Tick` stops
+  arrivals and treatment at the verdict (departure climb-out still runs);
+  `Aircraft::Interact` refuses departures after the verdict.
+- New `Holdover.MP.ShiftEndFreeze`: departs once legitimately, ends the shift,
+  then attempts every post-verdict scoring path (direct register, interact,
+  holdover abort, late arrival) and asserts the ledger is byte-identical.
+  Suite **29/29 pass**.
+
+## 2026-11-02 - Sonnet review H3/M1: spray RPC unreliable + spray rate limit
+- **H3 (verified real):** `ServerSpray` was `UFUNCTION(Server, Reliable)` sent at
+  10 Hz per spraying client — a reliable stream that backs up the reliable
+  buffer under packet loss (hitches/disconnects). Now `Unreliable` like
+  `ServerSetBoom`; the request is idempotent (dt clamped server-side), so a
+  lost update costs nothing.
+- **M1 (cheap, rides with H3):** `ServerApplySprayRequest` now runs the same
+  token-bucket pattern as the boom — spray time accrues at 1x real time, banked
+  up to 2x the request interval. dt was already clamped per request; this
+  bounds REQUESTS per second, so a 1000 RPC/s flood can no longer apply ~200s
+  of spray per real second. `NowSeconds` injectable for tests (boom pattern).
+- `Holdover.MP.SprayValidation` extended: injected times + same-time flood
+  (moves nothing) + idle-refill (one burst only). Suite **28/28 pass**.
+
+## 2026-11-02 - Sonnet review H1/H2 + M17: client-truth fixes
+- **H1 (verified real):** `ShiftNumber`, `TotalCompanyPay`,
+  `TotalCompanyDeductions`, `CompanyLedger` were `UPROPERTY(ReplicatedUsing)`
+  but had **no DOREPLIFETIME** — clients kept defaults (SHIFT 1 / ledger $0
+  forever, wrong profile name, field-manual auto-open never triggering).
+  Registered in `GetLifetimeReplicatedProps`; added to the replication contract.
+- **H2 (verified real):** `AHoldoverAircraft::BeginPlay` wrote replicated
+  `bArrived` and hid the actor with no authority guard — a client whose initial
+  replication lands before BeginPlay stayed hidden all shift. Arrival init is
+  now authority-only; clients derive visuals through the new public
+  `SyncArrivalVisuals()` (also called from `OnRep_Arrived`).
+- **M17 (cheap half):** `SyncArrivalVisuals` also drives the unattached surface
+  sections' hidden/collision from `bArrived`/`bDeparted` (departed sections no
+  longer stay visible and sprayable; the departed plane stays visible for its
+  climb-out cue).
+- **Test gap closed mechanically:** `Holdover.MP.ReplicationLint` reads each
+  class's .cpp and asserts every contract property has a real
+  `DOREPLIFETIME[_CONDITION](<Class>, <Prop>` line — this is the H1-class hole
+  the CPF_Net-only contract test could not see. Plus
+  `Holdover.MP.ArrivalVisuals` for the H2 client path.
+- Tests: `run_tests.ps1` **28/28 pass**.
+
+## 2026-11-02 - READY FOR ALI: consolidated NEEDS_ALI + status
+- `Docs/AI/NEEDS_ALI.md` rewritten as ONE prioritised list: 9 items (packaged
+  full shift, DES-6 gate, 3-4p MP, field-manual placeholders, legal review,
+  atmosphere, snow Niagara, art assets, Steamworks) each with exact steps,
+  estimated minutes and the AI's follow-up. ~5 h total; 1-5 are the
+  demo-critical path.
+- `Docs/AI/STATUS.md` now opens **READY FOR ALI** with a 10-line summary.
+- Legal DRAFT label landed in the previous commit (test-enforced).
+
+## 2026-11-02 - Phase 10: legal text labelled DRAFT (not final)
+- `HoldoverInfoContent.cpp` `LegalText()` now leads with
+  **"DRAFT - not legal advice, needs Ali/lawyer review"** — the legal block is a
+  draft only and must never be presented as final until reviewed. The
+  `Holdover.Info.CreditsLegalFeedback` test asserts the label stays present
+  (same flip-after-review rule as the `[[TODO:ALI]]` placeholders).
+- Tests: `run_tests.ps1` 26/26 pass. Repackaged + smoke: PASS (0 fatals,
+  `L_RampGreybox` loads).
+
 ## 2026-11-02 - Phase 10: NEEDS_ALI #7 prep - field-manual values isolated
 - `HoldoverInfoContent.cpp`: pulled the six values the AI must not invent into a
   single marked block at the top of the file (`GStudioName`, `GCodeCredit`,

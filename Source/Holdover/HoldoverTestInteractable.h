@@ -33,4 +33,7 @@ protected:
 	/** Toggled on each interaction so the effect is visible in PIE. */
 	UPROPERTY(Transient)
 	TObjectPtr<UMaterialInstanceDynamic> DynamicMaterial;
+
+	/** N5: per-instance colour toggle (was a static shared by all instances). */
+	bool bToggledColor = false;
 };

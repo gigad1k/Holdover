@@ -7,6 +7,7 @@
 #include "HoldoverHazardVolume.generated.h"
 
 class UBoxComponent;
+class ACharacter;
 
 UENUM(BlueprintType)
 enum class EHoldoverHazardType : uint8
@@ -48,6 +49,27 @@ public:
 	UPROPERTY(EditDefaultsOnly, Category = "Hazard")
 	float JetBlastCooldown = 5.f;
 
+	/** M6: client-predicted launch only on a true client. On a listen host the
+	 *  authority launch already runs in the same frame - predicting too launched
+	 *  twice (the second overwrote the first). */
+	static bool ShouldPredictLaunch(bool bHasAuthority, bool bLocallyControlled)
+	{
+		return bLocallyControlled && !bHasAuthority;
+	}
+
+	/** M6: deterministic ice-stumble direction (used to be per-call FRandRange,
+	 *  so the predicted and authoritative launches never matched). */
+	static FVector ComputeStumbleDirection(const FVector& CharacterForward)
+	{
+		return (CharacterForward * 0.5f + FVector(0.f, 0.f, 0.15f)).GetSafeNormal();
+	}
+
+	/** M6: deterministic jet-blast push direction (away from the hazard). */
+	static FVector ComputeJetBlastDirection(const FVector& HazardLocation, const FVector& CharacterLocation)
+	{
+		return (CharacterLocation - HazardLocation).GetSafeNormal2D() + FVector(0.f, 0.f, 0.35f);
+	}
+
 protected:
 	UPROPERTY(VisibleAnywhere, Category = "Components")
 	UBoxComponent* Box;
@@ -60,6 +82,13 @@ protected:
 	void OnOverlapEnd(UPrimitiveComponent* OverlappedComp, AActor* OtherActor,
 		UPrimitiveComponent* OtherComp, int32 OtherBodyIndex);
 
+public:
+	/** The overlap behaviour itself (the UFUNCTIONs above just cast and forward
+	 *  here) so world tests can drive it without the physics scene. */
+	void HandleBeginOverlap(ACharacter* Character);
+	void HandleEndOverlap(ACharacter* Character);
+
+protected:
 	/** Per-player last jet-blast penalty time (server-only). */
 	TMap<TWeakObjectPtr<AActor>, float> JetBlastCooldownMap;
 };

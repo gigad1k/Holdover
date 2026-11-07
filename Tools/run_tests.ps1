@@ -64,7 +64,7 @@
 [CmdletBinding()]
 param(
     [string]$TestFilter = 'Holdover',
-    [string]$UEPath     = 'D:\Gamez\EPIC\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe',
+    [string]$UEPath     = 'C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor-Cmd.exe',
     [string]$Project    = '',
     [string]$AbsLog     = '',
     [int]$TimeoutSec    = 900
@@ -74,16 +74,50 @@ Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
 
 # ---------------------------------------------------------------------------
-# The 7 tests expected under the 'Holdover' filter (PROC-4 / CODE_REVIEW).
+# Every test expected under the 'Holdover' filter (PROC-4 / CODE_REVIEW / M15).
+# Sonnet M15: the old list held 7 of 31 names, so a deleted or renamed test
+# outside the list passed silently. Keep this in sync when adding tests.
 # ---------------------------------------------------------------------------
 $ExpectedTests = @(
+    'Holdover.Audio.Hygiene',
+    'Holdover.Hazard.IceOverlapCount',
+    'Holdover.Hazard.JetBlastPrediction',
+    'Holdover.Info.CreditsLegalFeedback',
+    'Holdover.Info.QuickTip',
+    'Holdover.Info.TutorialTips',
+    'Holdover.Movement.SpeedScale',
+    'Holdover.MP.ArrivalVisuals',
+    'Holdover.MP.BoomValidation',
+    'Holdover.MP.CoverageAuthority',
+    'Holdover.MP.DepartOnce',
+    'Holdover.MP.LineOfSight',
+    'Holdover.MP.RefillGuard',
+    'Holdover.MP.ReplicationContract',
+    'Holdover.MP.ReplicationLint',
+    'Holdover.MP.SectionTargetValidation',
+    'Holdover.MP.ShiftEndFreeze',
+    'Holdover.MP.SprayValidation',
     'Holdover.Shift.DepartureOnlyOnceAndValid',
+    'Holdover.Shift.RestartGuard',
     'Holdover.Shift.ScoringAndRestart',
+    'Holdover.Spray.DtClamp',
+    'Holdover.Treatment.AircraftTuningStays',
+    'Holdover.Treatment.Contamination',
+    'Holdover.Treatment.DispatcherBank',
     'Holdover.Treatment.FluidRules',
     'Holdover.Treatment.HoldoverStateMachine',
+    'Holdover.Treatment.NetPay',
+    'Holdover.Treatment.OneTankRefill',
+    'Holdover.Treatment.PlayerStateAttribution',
+    'Holdover.Treatment.ProfilePayRules',
     'Holdover.Treatment.SectionIndependenceAndClamp',
+    'Holdover.Treatment.SectionOwnership',
+    'Holdover.Treatment.ShiftProfiles',
     'Holdover.Truck.BoomClampAndApply',
-    'Holdover.UI.BoardStateColor'
+    'Holdover.Truck.ExitTeleport',
+    'Holdover.Truck.OccupantEviction',
+    'Holdover.UI.BoardStateColor',
+    'Holdover.UI.DepartureBoardRows'
 )
 
 # Result line format (AutomationControllerManager.cpp, AutomationStateFormat):
@@ -107,7 +141,7 @@ function Resolve-ProjectPath {
     if ($Project -ne '') { return $Project }
     $derived = Join-Path (Split-Path -Parent $PSScriptRoot) 'Holdover.uproject'
     if (Test-Path -LiteralPath $derived) { return $derived }
-    return 'D:\Projects\HOLDOVER\Holdover.uproject'
+    throw "Holdover.uproject not found next to Tools\ (looked at $derived); pass -Project"
 }
 
 # Returns candidate log files (excluding engine "*-backup-*" copies) written
@@ -446,6 +480,12 @@ Write-Output ("Missing expected    : {0}" -f $missing.Count)
 if ($totalResults -eq 0) {
     Write-Output 'RESULT: UNDETERMINED - no test results could be parsed from the log.'
     exit 2
+}
+# Sonnet M15: a cut-short run must not pass - the engine reports how many tests
+# it performed; below the suite size means results are incomplete.
+if ($parsed.EngineTestCount -gt 0 -and $parsed.EngineTestCount -lt $ExpectedTests.Count) {
+    Write-Output ("RESULT: FAIL - engine performed only {0} of {1} expected tests (run cut short)." -f $parsed.EngineTestCount, $ExpectedTests.Count)
+    exit 1
 }
 if ($failed.Count -gt 0) {
     Write-Output ("RESULT: FAIL - {0} test(s) did not return Result={{Success}}." -f $failed.Count)

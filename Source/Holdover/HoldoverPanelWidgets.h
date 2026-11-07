@@ -10,6 +10,7 @@
 class UTextBlock;
 class UBorder;
 class UVerticalBox;
+class UWorld;
 class AHoldoverAircraft;
 
 /** Shows the aircraft's treatment state and holdover clock. */
@@ -27,13 +28,17 @@ public:
 	 *  running=green, under 30s=yellow, expired=red, otherwise white. */
 	static FLinearColor HoldoverStateColor(EHoldoverState State, float RemainingSeconds);
 
-protected:
-	UPROPERTY(Transient) UTextBlock* StatusLine;
-	UPROPERTY(Transient) UTextBlock* TreatmentLine;
-	UPROPERTY(Transient) UTextBlock* SectionLine;
+	/** M12: every live aircraft (arrived, not yet departed) gets a board row.
+	 *  The old code cached the first TActorIterator hit and broke. */
+	static void GatherBoardAircraft(UWorld* World, TArray<AHoldoverAircraft*>& OutAircraft);
 
-	/** Cached so NativeTick re-scans the world only when the pointer goes stale. */
-	UPROPERTY(Transient) TWeakObjectPtr<AHoldoverAircraft> CachedAircraft;
+protected:
+	/** One pooled text block per rendered row (3 per live aircraft). */
+	UPROPERTY(Transient) UVerticalBox* RowBox;
+	UPROPERTY(Transient) TArray<TObjectPtr<UTextBlock>> RowPool;
+
+	/** N2: SetText only when the row's string actually changed. */
+	TArray<FString> LastRowTexts;
 };
 
 /** Last dispatcher lines (radio feed). */

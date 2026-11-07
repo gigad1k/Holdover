@@ -22,7 +22,8 @@
 
 AHoldoverDeicingTruck::AHoldoverDeicingTruck()
 {
-	PrimaryActorTick.bCanEverTick = true;
+	// Sonnet N1: Tick was empty - don't pay for one.
+	PrimaryActorTick.bCanEverTick = false;
 	bReplicates = true;
 	SetReplicatingMovement(true);
 
@@ -171,6 +172,11 @@ void AHoldoverDeicingTruck::ServerExit_Implementation()
 		{
 			HC->SetVehicleHidden(false);
 		}
+		// N4: leave the driver beside the truck, not at the spot it stood when it
+		// entered (the truck may have moved - mandatory once driving is enabled).
+		Pawn->SetActorLocation(
+			GetActorLocation() + GetActorRightVector() * 300.f + FVector(0.f, 0.f, 50.f),
+			false, nullptr, ETeleportType::TeleportPhysics);
 		UE_LOG(LogHoldover, Display, TEXT("Truck '%s' exited back to '%s'"), *GetName(), *Pawn->GetName());
 	}
 	OccupantCharacter.Reset();
@@ -190,15 +196,24 @@ void AHoldoverDeicingTruck::StopSprayLocal()
 	}
 }
 
-void AHoldoverDeicingTruck::EvictOccupant()
+void AHoldoverDeicingTruck::EvictOccupant(bool bDestroyOrphan)
 {
-	UE_LOG(LogHoldover, Display, TEXT("EvictOccupant: %s world=%s had=%d"), *GetName(),
-		GetWorld() ? *GetWorld()->GetName() : TEXT("null"), OccupantCharacter.IsValid() ? 1 : 0);
+	UE_LOG(LogHoldover, Display, TEXT("EvictOccupant: %s world=%s had=%d destroy=%d"), *GetName(),
+		GetWorld() ? *GetWorld()->GetName() : TEXT("null"), OccupantCharacter.IsValid() ? 1 : 0,
+		bDestroyOrphan ? 1 : 0);
 	if (APawn* Pawn = Cast<APawn>(OccupantCharacter.Get()))
 	{
 		if (AHoldoverCharacter* HC = Cast<AHoldoverCharacter>(Pawn))
 		{
 			HC->SetVehicleHidden(false);
+		}
+		// M8: when the controller is leaving (disconnect) the occupant is the
+		// abandoned original pawn - destroy it like the engine destroys any
+		// disconnecting player's pawn, instead of leaving an orphan standing in
+		// the world uncontrolled.
+		if (bDestroyOrphan)
+		{
+			Pawn->Destroy();
 		}
 	}
 	OccupantCharacter.Reset();
@@ -209,8 +224,9 @@ void AHoldoverDeicingTruck::UnPossessed()
 {
 	// P7-2/MP-9: kill local spray loop + input context on any possession-lifetime edge.
 	// NOTE: the engine also calls UnPossessed inside Possess() during ENTRY (callstack
-	// verified 2026-10-30) — so this must NOT evict the occupant here. Departure
-	// eviction lives in ServerExit, GameMode::Logout and EndPlay.
+	// verified 2026-10-30) - so this must NOT evict the occupant here. Departure
+	// eviction lives in ServerExit, PawnLeavingGame (the single disconnect path)
+	// and EndPlay.
 	StopSprayLocal();
 	RemoveTruckInputContext();
 	Super::UnPossessed();
@@ -288,20 +304,31 @@ void AHoldoverDeicingTruck::YawBoom(float Direction)
 {
 	const float DeltaSeconds = GetWorld()->GetDeltaSeconds();
 	SetBoom(BoomYaw + Direction * YawSpeed * DeltaSeconds, BoomExtension);
-	if (!HasAuthority())
-	{
-		ServerSetBoom(BoomYaw, BoomExtension);
-	}
+	SendBoomUpdate();
 }
 
 void AHoldoverDeicingTruck::ExtendBoom(float Direction)
 {
 	const float DeltaSeconds = GetWorld()->GetDeltaSeconds();
 	SetBoom(BoomYaw, BoomExtension + Direction * ExtensionSpeed * DeltaSeconds);
-	if (!HasAuthority())
+	SendBoomUpdate();
+}
+
+void AHoldoverDeicingTruck::SendBoomUpdate()
+{
+	if (HasAuthority())
 	{
-		ServerSetBoom(BoomYaw, BoomExtension);
+		return;
 	}
+	// N3: 60-144 unreliable RPCs per second while a key is held is waste - the
+	// targets are absolute, so a ~20 Hz stream tracks the same motion.
+	const double Now = GetWorld() ? (double)GetWorld()->GetTimeSeconds() : 0.0;
+	if (LastBoomSendTime >= 0.0 && Now - LastBoomSendTime < BoomSendInterval)
+	{
+		return;
+	}
+	LastBoomSendTime = Now;
+	ServerSetBoom(BoomYaw, BoomExtension);
 }
 
 void AHoldoverDeicingTruck::BoomYawLeft(const FInputActionValue& Value) { YawBoom(-1.f); }

@@ -64,7 +64,9 @@ protected:
 public:
 	// --- replicated speed state (MP-2) ---
 
-	/** Server-side ice slow toggled by hazard volumes (Multiplier = hazard tuning value). */
+	/** Server-side ice slow toggled by hazard volumes (Multiplier = hazard tuning
+	 *  value). M5: overlap-counted — begin/end pairs must balance, and the slow
+	 *  only clears when the last overlapping ice patch releases. */
 	void SetIceSlowed(bool bSlowed, float Multiplier);
 
 	/** MP-6: vehicle occupancy hides the body and disables collision. Replicated so
@@ -88,6 +90,11 @@ protected:
 	UFUNCTION()
 	void OnRep_SpeedScale();
 
+	/** M4: recomputes the local speed when the server's ice multiplier arrives,
+	 *  so a sprinting client predicts Base*Ice*Sprint exactly like the server. */
+	UFUNCTION()
+	void OnRep_IceScale();
+
 	UFUNCTION()
 	void OnRep_VehicleHidden();
 
@@ -107,7 +114,15 @@ protected:
 	bool bVehicleHidden = false;
 
 	bool bSprinting = false;
+
+	/** Server-set ice multiplier (hazard volumes). Replicated (M4) because the
+	 *  client's local sprint prediction multiplies by it. */
+	UPROPERTY(ReplicatedUsing = OnRep_IceScale)
 	float IceScale = 1.f;
+
+	/** M5: number of currently overlapped ice patches (server-only). */
+	int32 IceOverlapCount = 0;
+
 	float BaseWalkSpeed = 0.f;
 
 	/** Called from Input Actions for movement input */
@@ -162,6 +177,12 @@ protected:
 	/** MP-9: explicit mapping-context removal on possession end (contexts must not
 	 *  accumulate across enter/exit cycles). */
 	void RemoveHoldoverInputContext();
+
+	/** Sonnet M14: held so the looping wind ambience can be stopped on EndPlay
+	 *  (it used to leak a new loop per respawn/PIE restart). */
+	UPROPERTY(Transient)
+	TObjectPtr<class UAudioComponent> WindLoopComponent;
+
 	virtual void UnPossessed() override;
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 

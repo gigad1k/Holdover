@@ -12,6 +12,7 @@ class UHoldoverDepartureBoardWidget;
 class UHoldoverDispatcherFeedWidget;
 class UHoldoverShiftResultsWidget;
 class UHoldoverInfoWidget;
+class UHoldoverSprayComponent;
 
 /**
  * Root UMG HUD. Reads live C++ game state every tick (no duplicated state):
@@ -42,6 +43,13 @@ protected:
 
 	/** Auto-show the manual once on the first shift so a new player finds it. */
 	bool bAutoShowedInfo = false;
+
+	/** N2: only SetText when the rebuilt string actually changed, and only
+	 *  re-find the spray component when the possessed pawn changes. */
+	FString LastShiftLine;
+	FString LastTreatmentLine;
+	TWeakObjectPtr<APawn> CachedHudPawn;
+	TWeakObjectPtr<UHoldoverSprayComponent> CachedHudSpray;
 
 	/** Shared by NativeConstruct and NativeTick - one opens it, the other keeps it
 	 *  working if the shift begins after the widget is built. */
